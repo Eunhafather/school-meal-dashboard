@@ -74,6 +74,24 @@ body:has(.request-layout) main,body:has(.request-layout) .top-inner{max-width:19
 @media(max-width:700px){.academic-calendar{padding:14px 12px}.calendar-month-heading{align-items:flex-start;flex-direction:column;gap:6px}.calendar-months{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.calendar-months button{min-width:0;padding:8px 4px}.calendar-table col:first-child{width:120px!important}.request-layout .calendar-table tr>:first-child{min-width:120px;padding:10px 8px}.calendar-bulk-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.calendar-bulk-note{grid-column:1/-1}.calendar-bulk-fields button{grid-column:1/-1}.calendar-edit-note>div{flex-direction:column}.calendar-edit-note select{max-width:100%}.calendar-heading .badge{white-space:normal}.calendar-source{padding:0 10px}}
 
 .calendar-note-button{width:44px;min-width:44px;min-height:44px;padding:6px 2px;font-size:14px;color:var(--muted);border-color:transparent;background:var(--surface)}.calendar-note-button.has-note{color:var(--blue);background:var(--blue-bg);font-weight:650;border-color:var(--border)}.calendar-edit-note textarea{min-width:0;min-height:76px;line-height:1.6;overflow-wrap:anywhere}.calendar-edit-note select{align-self:flex-start}
+
+/* Public holidays are labels only: never change the saved meal schedule. */
+.calendar-holidays{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.calendar-holiday-key{color:var(--red);font-weight:650}
+.calendar-holidays>ul{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:10px 0 0}
+.calendar-holidays>ul button{min-height:44px;white-space:normal;text-align:left;font-size:14px;color:var(--red);background:var(--red-bg);border-color:var(--border);padding:8px 12px}
+.calendar-holidays>ul button:hover{border-color:var(--red)}
+.calendar-holidays>ul b{margin-right:4px;white-space:nowrap}
+.calendar-holidays details{margin-top:8px;font-size:14px}
+.calendar-holidays summary{min-height:44px;padding:10px 0;cursor:pointer;font-weight:600}
+.calendar-holidays details .hint{margin:0 0 8px}
+.calendar-holiday-sources{padding-left:20px;margin:8px 0;overflow-wrap:anywhere}
+.calendar-holiday-sources a{display:inline-block;color:var(--blue);padding:8px 0;min-height:44px}
+.request-layout .calendar-table thead th.calendar-holiday{color:var(--red);background:var(--red-bg)}
+.calendar-table thead th.calendar-holiday>span{color:var(--red)}
+.calendar-holiday-tag{display:block;color:var(--red);font-size:14px;line-height:1.3;font-weight:650;margin-top:3px}
+.calendar-holiday-cell{background:var(--red-bg)}
+@media(max-width:700px){.calendar-holidays{padding:10px}.calendar-holidays>ul{gap:6px}.calendar-holidays>ul li{max-width:100%}.calendar-holidays>ul button{max-width:100%;overflow-wrap:anywhere}}
 </style></head><body><header class="top">
   <div class="top-inner">
     <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V5l8-3 8 3v16M2 21h20M8 8h2m4 0h2M8 12h2m4 0h2M10 21v-5h4v5"/></svg></span>학교 급식 지원금 관리</div>
@@ -125,6 +143,43 @@ function days(calendar,m,i){const v=calendar?.months?.[m];return v?.use?.[i]===t
 function totals(calendar,m){return calendar.months[m].grades.map(a=>a.reduce((x,y)=>x+y,0));}
 function weekday(year,m,d){return new Date(Date.UTC(actualYear(year,m),m-1,d)).getUTCDay();}
 const api={M,REF,actualYear,length,initial,validate,days,totals,weekday};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MealCalendar=api;
+})(typeof window!=='undefined'?window:globalThis);
+</script><script>(function(root){
+'use strict';
+// Verified, offline civil-year dates. Do not infer substitute/temporary holidays.
+// Calendar-year keys are independent of the academic-year data classification.
+const SOURCES=Object.freeze([
+ {name:'2026년 월력요항 · 한국천문연구원',url:'https://www.kasi.re.kr/kor/publication/post/newsMaterial/32031'},
+ {name:'2027년 월력요항 · 우주항공청',url:'https://www.kasa.go.kr/prog/plcyBrf/brief/kor/sub01_01_04/view.do?plcyBrfNo=431'},
+ {name:'노동절·제헌절 공휴일 지정 · 인사혁신처',url:'https://www.mpm.go.kr/mpm/comm/newsPress/newsPressRelease?boardId=bbs_0000000000000029&cntId=4250&mode=view'},
+ {name:'2027년 부처님오신날 날짜 교차 확인',url:'https://publicholidays.co.kr/ko/buddhas-birthday'}
+].map(Object.freeze));
+const RAW={
+ 2026:[
+ ['01-01','1월 1일'],['02-16','설 연휴'],['02-17','설날'],['02-18','설 연휴'],
+ ['03-01','3·1절'],['03-02','대체공휴일 (3·1절)','substitute'],
+ ['05-01','노동절'],['05-05','어린이날'],['05-24','부처님오신날'],['05-25','대체공휴일 (부처님오신날)','substitute'],
+ ['06-03','제9회 전국동시지방선거','election'],['06-06','현충일'],['07-17','제헌절'],
+ ['08-15','광복절'],['08-17','대체공휴일 (광복절)','substitute'],
+ ['09-24','추석 연휴'],['09-25','추석'],['09-26','추석 연휴'],
+ ['10-03','개천절'],['10-05','대체공휴일 (개천절)','substitute'],['10-09','한글날'],['12-25','성탄절']
+ ],
+ 2027:[
+ ['01-01','1월 1일'],['02-06','설 연휴'],['02-07','설날'],['02-08','설 연휴'],['02-09','대체공휴일 (설날)','substitute'],
+ ['03-01','3·1절'],['05-01','노동절'],['05-03','대체공휴일 (노동절)','substitute'],['05-05','어린이날'],['05-13','부처님오신날'],
+ ['06-06','현충일'],['07-17','제헌절'],['07-19','대체공휴일 (제헌절)','substitute'],
+ ['08-15','광복절'],['08-16','대체공휴일 (광복절)','substitute'],
+ ['09-14','추석 연휴'],['09-15','추석'],['09-16','추석 연휴'],
+ ['10-03','개천절'],['10-04','대체공휴일 (개천절)','substitute'],['10-09','한글날'],['10-11','대체공휴일 (한글날)','substitute'],
+ ['12-25','성탄절'],['12-27','대체공휴일 (성탄절)','substitute']
+ ]
+};
+const DATA=Object.freeze(Object.fromEntries(Object.entries(RAW).map(([year,rows])=>[year,Object.freeze(Object.fromEntries(rows.map(([md,name,type='public'])=>[md,Object.freeze({date:year+'-'+md,name,type})])))])));
+function supports(year){return Object.hasOwn(DATA,year);}
+function month(year,m){if(!Number.isInteger(year)||!Number.isInteger(m)||m<1||m>12)return [];const prefix=String(m).padStart(2,'0')+'-';return Object.entries(DATA[year]??{}).filter(([md])=>md.startsWith(prefix)).map(([,h])=>h);}
+function at(year,m,d){if(!Number.isInteger(year)||!Number.isInteger(m)||!Number.isInteger(d)||m<1||m>12||d<1||d>31)return null;return DATA[year]?.[String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0')]??null;}
+const api=Object.freeze({years:Object.freeze([2026,2027]),SOURCES,supports,month,at});
+if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MealHolidays=api;
 })(typeof window!=='undefined'?window:globalThis);
 </script><script>(function(root){
 'use strict';
@@ -970,17 +1025,19 @@ window.GrantUI={render};})();
 </script><script>(()=>{'use strict';
 let selectedYear=null,selectedMonth=10;
 function render({host,calendar,year,esc,onChange}){
- const A=window.MealCalendar;let data=A.validate(calendar,year);if(selectedYear!==year){selectedYear=year;const now=new Date();selectedMonth=A.actualYear(year,now.getMonth()+1)===now.getFullYear()?now.getMonth()+1:3;}
+ const A=window.MealCalendar,H=window.MealHolidays;let data=A.validate(calendar,year);if(selectedYear!==year){selectedYear=year;const now=new Date();selectedMonth=A.actualYear(year,now.getMonth()+1)===now.getFullYear()?now.getMonth()+1:3;}
  const $=s=>host.querySelector(s),changed=()=>{onChange();};
- function draw(){const m=selectedMonth,v=data.months[m],n=A.length(year,m),t=A.totals(data,m),yr=A.actualYear(year,m),dayHeaders=Array.from({length:n},(_,i)=>{const d=i+1,w=A.weekday(year,m,d);return `<th scope="col" class="${w===0||w===6?'calendar-weekend':''}">${d}<span>${'일월화수목금토'[w]}</span></th>`;}).join('');
+ function draw(){const m=selectedMonth,v=data.months[m],n=A.length(year,m),t=A.totals(data,m),yr=A.actualYear(year,m),holidays=H.month(yr,m),dayHeaders=Array.from({length:n},(_,i)=>{const d=i+1,w=A.weekday(year,m,d),h=H.at(yr,m,d);return `<th scope="col" data-calendar-date="${d}" class="${h?'calendar-holiday':w===0||w===6?'calendar-weekend':''}" ${h?`title="${esc(h.name)}" aria-label="${yr}년 ${m}월 ${d}일 ${'일월화수목금토'[w]}요일 · ${esc(h.name)}"`:''}>${d}<span>${'일월화수목금토'[w]}</span>${h?`<small class="calendar-holiday-tag">${h.type==='substitute'?'대체':'공휴'}</small>`:''}</th>`;}).join('');
  host.innerHTML=`<section class="academic-calendar" aria-labelledby="calendar-title"><div class="calendar-heading"><div><h3 id="calendar-title">학사일정 · 학년별 날짜와 급식일수</h3><p class="hint">날짜는 가로로, 학년은 세로로 봅니다. 날짜별 <b>1 = 급식 / 0 = 미급식</b>을 누르면 해당 학년의 일수가 합산됩니다.</p></div><span class="badge blue">일정 → 일수 → 식수 → 지원금</span></div>
  ${year===2026?`<details class="calendar-source"><summary>원본 일정 참고 · 날짜 확인 후 적용</summary><p>제공한 2026학년도 관리대장의 ‘기초자료’ 날짜별 1 표시를 그대로 옮겼으며, 합계는 기존 월별 일수와 일치합니다. 원본 날짜 머리글에는 2025년 3~12월·2026년 1~2월이 들어 있고 일부 월 표시도 실제 날짜와 다릅니다. 자료를 전학년도로 분류한 것이 아닙니다. 이 화면의 날짜·요일은 선택 학년도(${year}년 3월~${year+1}년 2월) 기준입니다. 급식일 배치를 확인·수정한 뒤 학년별 ‘일수 적용’을 켜세요. 확인 전에는 기존 계산값을 바꾸지 않습니다.</p></details>`:'<p class="hint">새 학년도는 빈 일정으로 시작합니다. 학교 학사일정을 확인해 급식일을 지정하세요.</p>'}
  <nav class="calendar-months" aria-label="학사일정 대상 월">${A.M.map(x=>`<button type="button" data-calendar-month="${x}" aria-pressed="${m===x}">${x}월${data.months[x].use.some(Boolean)?'<span class="sr-only"> · 일정 일수 적용 중</span><span aria-hidden="true"> •</span>':''}</button>`).join('')}</nav>
  <div class="calendar-month-heading"><h4>${yr}년 ${m}월</h4><p class="hint">${v.use.some(Boolean)?'일정 연결: '+v.use.map((b,i)=>b?(i+1)+'학년':null).filter(Boolean).join(' · '):'참고 일정 · 계산 미적용'} · 좌우로 이동해 말일까지 확인하세요.</p></div>
- <div class="calendar-scroll" tabindex="0" role="region" aria-label="${yr}년 ${m}월 학년별 날짜별 급식 일정"><table class="calendar-table"><caption class="sr-only">${yr}년 ${m}월 · 1 급식, 0 미급식 · 학년별 일수 적용을 켜면 지원금 계산에 연결</caption><colgroup><col style="width:150px"><col span="${n}" style="width:48px"><col style="width:90px"></colgroup><thead><tr><th scope="col">학년 / 계산 연결</th>${dayHeaders}<th scope="col">일수</th></tr></thead><tbody>${v.grades.map((g,i)=>`<tr><th scope="row"><b>${i+1}학년</b><label class="calendar-use"><input type="checkbox" data-calendar-use="${i}" ${v.use[i]?'checked':''}>일수 적용</label></th>${g.map((b,d)=>`<td><button type="button" class="calendar-day" data-calendar-grade="${i}" data-calendar-day="${d+1}" aria-pressed="${b===1}" aria-label="${yr}년 ${m}월 ${d+1}일 ${i+1}학년 ${b?'급식 1일':'미급식'} · 누르면 변경">${b}</button></td>`).join('')}<td class="calendar-total"><output aria-label="${m}월 ${i+1}학년 일정 일수">${t[i]}일</output></td></tr>`).join('')}<tr class="calendar-events"><th scope="row">학사일정 메모<small>공통 · 날짜별</small></th>${Array.from({length:n},(_,i)=>`<td><button type="button" class="calendar-note-button ${v.notes[i+1]?'has-note':''}" data-calendar-note="${i+1}" aria-label="${yr}년 ${m}월 ${i+1}일 학사일정 메모 보기·수정" title="${esc(v.notes[i+1]??'메모 추가')}">${v.notes[i+1]?'보기':'+'}</button></td>`).join('')}<td></td></tr></tbody></table></div>
+ <div class="calendar-holidays" aria-label="이 달의 한국 공휴일"><p class="hint"><span class="calendar-holiday-key">공휴일·대체공휴일</span> ${H.supports(yr)?'이름을 누르면 해당 날짜로 이동합니다.':'이 연도의 공휴일 자료는 아직 반영되지 않았습니다. 주말만 표시하며, 학교 일정과 공식 공고를 확인하세요.'}</p>${H.supports(yr)?(holidays.length?`<ul>${holidays.map(h=>`<li><button type="button" data-calendar-holiday-jump="${Number(h.date.slice(-2))}"><b>${m}/${Number(h.date.slice(-2))}</b> ${esc(h.name)}</button></li>`).join('')}</ul>`:'<p class="hint">이 달에는 등록된 공휴일·대체공휴일이 없습니다. 토·일요일은 표에서 별도 표시합니다.</p>'):''}<details><summary>공휴일 표시 기준 · 급식 일정과 별도</summary><p class="hint">확인된 2026·2027년 공휴일을 내장 자료로 표시합니다. 실시간 조회가 아니므로 이후 지정되는 임시공휴일·법령 변경은 자료 갱신이 필요합니다. <b>표시만으로 급식 여부·일수·금액·메모를 바꾸지 않습니다.</b> 학교 일정을 확인한 뒤 날짜별 0/1을 직접 지정하세요.</p><ul class="calendar-holiday-sources">${H.SOURCES.map(x=>`<li><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a></li>`).join('')}</ul></details></div>
+ <div class="calendar-scroll" tabindex="0" role="region" aria-label="${yr}년 ${m}월 학년별 날짜별 급식 일정"><table class="calendar-table"><caption class="sr-only">${yr}년 ${m}월 · 1 급식, 0 미급식 · 학년별 일수 적용을 켜면 지원금 계산에 연결</caption><colgroup><col style="width:150px"><col span="${n}" style="width:48px"><col style="width:90px"></colgroup><thead><tr><th scope="col">학년 / 계산 연결</th>${dayHeaders}<th scope="col">일수</th></tr></thead><tbody>${v.grades.map((g,i)=>`<tr><th scope="row"><b>${i+1}학년</b><label class="calendar-use"><input type="checkbox" data-calendar-use="${i}" ${v.use[i]?'checked':''}>일수 적용</label></th>${g.map((b,d)=>`<td class="${H.at(yr,m,d+1)?'calendar-holiday-cell':''}"><button type="button" class="calendar-day" data-calendar-grade="${i}" data-calendar-day="${d+1}" aria-pressed="${b===1}" aria-label="${yr}년 ${m}월 ${d+1}일${H.at(yr,m,d+1)?' '+esc(H.at(yr,m,d+1).name):''} ${i+1}학년 ${b?'급식 1일':'미급식'} · 누르면 변경">${b}</button></td>`).join('')}<td class="calendar-total"><output aria-label="${m}월 ${i+1}학년 일정 일수">${t[i]}일</output></td></tr>`).join('')}<tr class="calendar-events"><th scope="row">학사일정 메모<small>공통 · 날짜별</small></th>${Array.from({length:n},(_,i)=>`<td><button type="button" class="calendar-note-button ${v.notes[i+1]?'has-note':''}" data-calendar-note="${i+1}" aria-label="${yr}년 ${m}월 ${i+1}일 학사일정 메모 보기·수정" title="${esc(v.notes[i+1]??'메모 추가')}">${v.notes[i+1]?'보기':'+'}</button></td>`).join('')}<td></td></tr></tbody></table></div>
  <details class="calendar-bulk"><summary>기간으로 일정 입력 · 메모 편집</summary><p class="hint">방학·시험·체험학습 등은 학년과 기간을 선택해 한 번에 반영하세요. 주말·공휴일은 자동 제외하지 않으며, 학교 일정에 맞춰 직접 지정합니다. 메모만 입력해도 급식 여부가 자동 변경되지는 않습니다.</p><div class="calendar-bulk-fields"><label>대상 학년<select id="calendar-bulk-grade"><option value="all">전 학년</option>${[0,1,2].map(i=>`<option value="${i}">${i+1}학년</option>`).join('')}</select></label><label>시작일<input id="calendar-bulk-from" type="number" min="1" max="${n}" value="1"></label><label>종료일<input id="calendar-bulk-to" type="number" min="1" max="${n}" value="${n}"></label><label>급식 여부<select id="calendar-bulk-value"><option value="0">0 · 미급식</option><option value="1">1 · 급식</option><option value="keep">변경 안 함 · 메모만</option></select></label><label class="calendar-bulk-note">공통 메모 (빈칸이면 기존 메모 유지)<input id="calendar-bulk-note" type="text" maxlength="120" placeholder="예: 2학년 체험학습"></label><button type="button" id="calendar-bulk-apply">선택 기간 반영</button></div><p id="calendar-bulk-error" role="alert"></p></details>
  <div id="calendar-edit-note" class="calendar-edit-note"><label for="calendar-note-text">날짜별 메모 전체 보기·수정</label><div><select id="calendar-note-date" aria-label="학사일정 메모 날짜">${Array.from({length:n},(_,i)=>`<option value="${i+1}">${m}월 ${i+1}일</option>`).join('')}</select><textarea id="calendar-note-text" maxlength="120" aria-label="선택 날짜 학사일정 메모" rows="2" placeholder="예: 3학년 수능 이후 미등교">${esc(v.notes[1]??'')}</textarea></div></div>
  <p class="hint">‘일수 적용’은 학년별로 선택합니다. 적용 중에는 아래 표의 해당 일수가 자동으로 표시되며, 해제하면 기존 직접 입력 일수로 돌아갑니다. 학생 실제 정산 식수·금액 변경액·교부액은 그대로 보존됩니다. 일정과 메모도 아래 <b>통합 표 전체 저장</b>으로 함께 저장합니다.</p><p id="calendar-status" role="status" class="hint" aria-live="polite">${m}월 일정: 1학년 ${t[0]}일 · 2학년 ${t[1]}일 · 3학년 ${t[2]}일</p></section>`;
+ host.querySelectorAll('[data-calendar-holiday-jump]').forEach(b=>b.onclick=()=>{const d=b.dataset.calendarHolidayJump,target=$(`[data-calendar-grade="0"][data-calendar-day="${d}"]`),scroller=$('.calendar-scroll'),cell=target.closest('td');scroller.scrollLeft=cell.offsetLeft-parseFloat(getComputedStyle($('.calendar-table col:first-child')).width)-12;target.focus({preventScroll:true});});
  host.querySelectorAll('[data-calendar-month]').forEach(b=>b.onclick=()=>show(+b.dataset.calendarMonth));
  host.querySelectorAll('[data-calendar-grade]').forEach(b=>b.onclick=()=>{const i=+b.dataset.calendarGrade,d=+b.dataset.calendarDay;v.grades[i][d-1]=1-v.grades[i][d-1];const focus=`[data-calendar-grade="${i}"][data-calendar-day="${d}"]`,scroll=$('.calendar-scroll').scrollLeft;draw();$('.calendar-scroll').scrollLeft=scroll;$(focus).focus({preventScroll:true});changed();});
  host.querySelectorAll('[data-calendar-use]').forEach(c=>c.onchange=()=>{v.use[+c.dataset.calendarUse]=c.checked;const focus=c.dataset.calendarUse,scroll=$('.calendar-scroll').scrollLeft;draw();$('.calendar-scroll').scrollLeft=scroll;$(`[data-calendar-use="${focus}"]`).focus({preventScroll:true});changed();});

@@ -3,3 +3,21 @@
 @media(max-width:700px){.academic-calendar{padding:14px 12px}.calendar-month-heading{align-items:flex-start;flex-direction:column;gap:6px}.calendar-months{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.calendar-months button{min-width:0;padding:8px 4px}.calendar-table col:first-child{width:120px!important}.request-layout .calendar-table tr>:first-child{min-width:120px;padding:10px 8px}.calendar-bulk-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.calendar-bulk-note{grid-column:1/-1}.calendar-bulk-fields button{grid-column:1/-1}.calendar-edit-note>div{flex-direction:column}.calendar-edit-note select{max-width:100%}.calendar-heading .badge{white-space:normal}.calendar-source{padding:0 10px}}
 
 .calendar-note-button{width:44px;min-width:44px;min-height:44px;padding:6px 2px;font-size:14px;color:var(--muted);border-color:transparent;background:var(--surface)}.calendar-note-button.has-note{color:var(--blue);background:var(--blue-bg);font-weight:650;border-color:var(--border)}.calendar-edit-note textarea{min-width:0;min-height:76px;line-height:1.6;overflow-wrap:anywhere}.calendar-edit-note select{align-self:flex-start}
+
+/* Public holidays are labels only: never change the saved meal schedule. */
+.calendar-holidays{margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.calendar-holiday-key{color:var(--red);font-weight:650}
+.calendar-holidays>ul{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:10px 0 0}
+.calendar-holidays>ul button{min-height:44px;white-space:normal;text-align:left;font-size:14px;color:var(--red);background:var(--red-bg);border-color:var(--border);padding:8px 12px}
+.calendar-holidays>ul button:hover{border-color:var(--red)}
+.calendar-holidays>ul b{margin-right:4px;white-space:nowrap}
+.calendar-holidays details{margin-top:8px;font-size:14px}
+.calendar-holidays summary{min-height:44px;padding:10px 0;cursor:pointer;font-weight:600}
+.calendar-holidays details .hint{margin:0 0 8px}
+.calendar-holiday-sources{padding-left:20px;margin:8px 0;overflow-wrap:anywhere}
+.calendar-holiday-sources a{display:inline-block;color:var(--blue);padding:8px 0;min-height:44px}
+.request-layout .calendar-table thead th.calendar-holiday{color:var(--red);background:var(--red-bg)}
+.calendar-table thead th.calendar-holiday>span{color:var(--red)}
+.calendar-holiday-tag{display:block;color:var(--red);font-size:14px;line-height:1.3;font-weight:650;margin-top:3px}
+.calendar-holiday-cell{background:var(--red-bg)}
+@media(max-width:700px){.calendar-holidays{padding:10px}.calendar-holidays>ul{gap:6px}.calendar-holidays>ul li{max-width:100%}.calendar-holidays>ul button{max-width:100%;overflow-wrap:anywhere}}
