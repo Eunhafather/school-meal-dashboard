@@ -2,6 +2,7 @@
   'use strict';
   const Enrollment=typeof module!=='undefined'&&module.exports?require('./enrollment.cjs'):root.Enrollment;
   const Data=typeof module!=='undefined'&&module.exports?require('./ledger-data.cjs'):root.LedgerData;
+  const Calendar=typeof module!=='undefined'&&module.exports?require('./calendar.cjs'):root.MealCalendar;
   const M=[3,4,5,6,7,8,9,10,11,12,1,2];
   const LIMIT=9_000_000_000_000;
   const keys=['studentFood','studentOperations','annualLabor','staffFood','staffOperations','staffLabor','staffVat','staffRice'];
@@ -10,6 +11,7 @@
     const defaults=[4670,540,318588000,4670,540,870,87,63];
     return {
       planning:Enrollment.initial(),
+      calendar:Calendar.initial(year),
       mealForecast:{people:65},
       rates:Object.fromEntries(keys.map((k,i)=>[k,known?defaults[i]:null])),
       meals:Object.fromEntries(M.map(m=>[String(m),{grades:[0,1,2].map(()=>({people:null,days:null})),actualStudent:null,staff:null,external:null}])),
@@ -48,7 +50,7 @@
       if(!x||!['monthly','quarter'].includes(x.mode)||!Array.isArray(x.quarters)||x.quarters.length!==4)throw new Error('정산 적용 단위가 올바르지 않습니다.');
       corrections[type]={mode:x.mode,months:Object.fromEntries(M.map(m=>[String(m),correction(x.months[String(m)])])),quarters:x.quarters.map(correction)};
     }
-    return {rates,meals,corrections,planning:Enrollment.validate(obj.planning),mealForecast:{people:integer(obj.mealForecast?.people??65,100000)}};
+    return {calendar:Calendar.validate(obj.calendar,year),rates,meals,corrections,planning:Enrollment.validate(obj.planning),mealForecast:{people:integer(obj.mealForecast?.people??65,100000)}};
   }
   function product(a,b){return a===null||b===null?null:a*b;}
   function sum(values) {
@@ -56,7 +58,7 @@
     return {value:known.length?known.reduce((a,b)=>a+b,0):null,missing:values.length-known.length};
   }
   function compute(calc,ends=[2,5,8,11]) {
-    const data=validate(calc);
+    const data=validate(calc,calc.calendar?.year??2026);
     const rates=data.rates;
     const resolved=Enrollment.resolve(data);
     const planning=Enrollment.compute(data);
@@ -146,10 +148,10 @@
   }
   function changes(a,b,prefix=''){
     const out=[];
-    for(const k of Object.keys(b)){
+    for(const k of new Set([...Object.keys(a??{}),...Object.keys(b)])){
       const key=prefix?prefix+'.'+k:k;
       if(b[k]!==null&&typeof b[k]==='object')out.push(...changes(a?.[k],b[k],key));
-      else if(a?.[k]!==b[k])out.push({key,before:a?.[k]??null,after:b[k]});
+      else if(a?.[k]!==b[k])out.push({key,before:a?.[k]??null,after:b[k]??null});
     }
     return out;
   }
