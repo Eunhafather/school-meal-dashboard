@@ -2,6 +2,7 @@
   'use strict';
   const Ref=typeof module!=='undefined'&&module.exports?require('./ledger-reference.cjs'):root.LedgerReference;
   const F=typeof module!=='undefined'&&module.exports?require('./funding.cjs'):root.MealFunding;
+  const Data=typeof module!=='undefined'&&module.exports?require('./ledger-data.cjs'):root.LedgerData;
   const M=Ref.months;
   const groups=[
     {id:'income',name:'수입·징수',rows:[4,5,6,7,8,9,10,11,12,13,14,15,16]},
@@ -44,7 +45,8 @@
     return {mode:'reference',rows:structuredClone(Ref.rows),incomeStatus:[...Ref.incomeStatus],expenseStatus:[...Ref.expenseStatus],
       annualLabor:Ref.rows['6'].total,laborAllocation:sum(Ref.rows['6'].values),warnings:[...Ref.notes],sources:{}};
   }
-  function compute(state){
+  function compute(state,options={}){
+    const unified=options.unified===true;
     const config=validate(state.matrix,state.year)??initial(state.year);
     const cal=F.validate(state.calculation,state.year),fund=F.compute(cal,state.ends);
     const seeded=config.seeded,base=Ref.baseline;
@@ -56,11 +58,12 @@
     const over=(r,i)=>config.overrides[r+':'+M[i]];
     const corr=(type,i)=>{
       const c=cal.corrections[type],q=state.ends.findIndex(end=>i<=end);
-      if(c.mode==='quarter'&&c.quarters[q].value!==null)return {quarter:c.quarters[q].value,why:'분기 정산 변경액 · 월별 미배분'};
-      if(cal.planning.enabled&&fund.quarters[q][type].mode==='received')return {quarter:fund.quarters[q][type].applied,why:'실제 교부액 · 월별 미배분'};
+      if(!unified&&c.mode==='quarter'&&c.quarters[q].value!==null)return {quarter:c.quarters[q].value,why:'분기 정산 변경액 · 월별 미배분'};
+      if(!unified&&cal.planning.enabled&&fund.quarters[q][type].mode==='received')return {quarter:fund.quarters[q][type].applied,why:'실제 교부액 · 월별 미배분'};
       return {month:c.mode==='monthly'?c.months[String(M[i])].value:null};
     };
     const actual=(r,i)=>{
+      if(unified)return i<=M.indexOf(Data.actualThroughMonth)?Data.expenseRows[r]?.[i]??null:null;
       if(seeded&&Ref.expenseStatus[i]==='정산')return original(r,i);
       return optional.has(r)?null:null;
     };
@@ -71,7 +74,7 @@
       const teacher=row.staffMeals??(seeded?base.staffMeals[i]:null);
       for(const [r,type,rate,adjust] of [[4,'food',cal.rates.studentFood,base.foodAdjustments[i]],[5,'operations',cal.rates.studentOperations,base.operationAdjustments[i]]]){
         const c=corr(type,i);
-        let value=student===null||rate===null?null:student*rate+(seeded&&!cal.planning.enabled?adjust:0),why=seeded?'식수 × 단가 + 원본 보정액':'식수 × 단가';
+        let value=student===null||rate===null?null:student*rate+(seeded&&(!cal.planning.enabled||unified)?adjust:0),why=seeded?'제공 관리대장 학생수·월별 급식일수 × 단가 + 원본 보정액':'식수 × 단가';
         if(c.quarter!==undefined){value=null;why=c.why;}
         else if(c.month!==null&&c.month!==undefined){value=c.month;why='식수·지원금 산정의 월별 정산 변경액';}
         if(c.quarter===undefined&&over(r,i)){value=over(r,i).value;why='대장 셀 변경액 우선 · '+over(r,i).reason;}
@@ -79,10 +82,10 @@
       }
       set(6,i,over(6,i)?.value??(seeded?base.laborAllocation[i]:null),over(6,i)?'인건비 월별 계획배분 변경액':'원본 인건비 월별 계획배분 · 실제 교부시점 아님');
       set(8,i,over(8,i)?.value??(teacher===null||fund.staffRate===null?null:teacher*fund.staffRate),over(8,i)?'셀 변경액':'교직원 식수 × 1식 합계 · 수납액 아님');
-      let charges=config.incomeStatus[i]==='예상'?get(8,i):(seeded&&Ref.incomeStatus[i]==='정산'?original(9,i):null);
-      set(9,i,over(9,i)?.value??charges,over(9,i)?'셀 변경액':config.incomeStatus[i]==='예상'?'예상: 교직원 징수예상액':'정산: 첨부 대장 징수액 · 신규 정산월은 입력 필요');
-      set(10,i,over(10,i)?.value??original(10,i),over(10,i)?'셀 변경액':'첨부 대장 수납액 · 실제 신규 수납자료 미연결');
-      set(11,i,config.incomeStatus[i]==='정산'?minus(get(9,i),get(10,i)):null,'정산월 징수액 - 수납액 · 예상월 미납액은 미확정');
+      let charges=config.incomeStatus[i]==='예상'?get(8,i):(unified?Data.receipts.charged[i]:seeded&&Ref.incomeStatus[i]==='정산'?original(9,i):null);
+      set(9,i,over(9,i)?.value??charges,over(9,i)?'셀 변경액':config.incomeStatus[i]==='예상'?'예상: 교직원 징수예상액':unified?'징수부 실적 · 적요의 급식 대상월 기준':'정산: 첨부 대장 징수액 · 신규 정산월은 입력 필요');
+      set(10,i,over(10,i)?.value??(unified?Data.receipts.received[i]:original(10,i)),over(10,i)?'셀 변경액':unified?'징수부 실제 수납액 · 미래 수납을 예상 현금으로 만들지 않음':'첨부 대장 수납액 · 실제 신규 수납자료 미연결');
+      set(11,i,config.incomeStatus[i]==='정산'?(minus(get(9,i),get(10,i))===null?null:minus(get(9,i),get(10,i))-(unified?Data.receipts.writeoff[i]:0)):null,'자료 실적월 징수액 - 수납액 - 불납결손액 · 예상월 미납액은 미확정');
       const tf=teacher===null||fund.foodStaffRate===null?null:teacher*fund.foodStaffRate;
       const to=teacher===null||cal.rates.staffOperations===null?null:teacher*cal.rates.staffOperations;
       let tl=teacher===null||cal.rates.staffLabor===null||cal.rates.staffVat===null?null:teacher*(cal.rates.staffLabor+cal.rates.staffVat);
@@ -94,7 +97,7 @@
       for(const r of [19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,38,39,43,44,45,46,47,48,49]){
         let value=null,why='';
         if(r===39){value=get(14,i);why='원본 방식: 수익자인건비 배분액';}
-        else if(config.expenseStatus[i]==='정산'){value=actual(r,i);why='첨부 대장 정산월 집계값 · 신규 정산월은 입력 필요';}
+        else if(config.expenseStatus[i]==='정산'){value=actual(r,i);why=unified?'지출실적조회 지급확정 합계 · 제목의 대상월 / 산출내역 일치':'첨부 대장 정산월 집계값 · 신규 정산월은 입력 필요';}
         else{
           if(r===19||r===20){
             // Original forecast split, not a newly asserted funding policy.
@@ -122,7 +125,7 @@
     }
     // Quarterly overrides remain unallocated in monthly cells; count them once in annual totals.
     for(const [r,type] of [[4,'food'],[5,'operations']]){
-      if(cal.corrections[type].mode==='quarter'||fund.quarters.some(q=>q[type].mode==='received')){
+      if(!unified&&(cal.corrections[type].mode==='quarter'||fund.quarters.some(q=>q[type].mode==='received'))){
         let start=0,parts=[];
         state.ends.forEach((end,q)=>{
           const changed=fund.quarters[q][type].mode==='received'?fund.quarters[q][type].applied:cal.corrections[type].mode==='quarter'?cal.corrections[type].quarters[q].value:null;
@@ -144,12 +147,30 @@
     const allocation=sum(rows['6'].values);
     if(labor!==null&&allocation!==labor)warnings.push('인건비 연간 기준 '+labor.toLocaleString('ko-KR')+'원과 월별 계획배분 '+(allocation===null?'미입력':allocation.toLocaleString('ko-KR')+'원')+'이 일치하지 않습니다. 실제 교부로 간주하지 말고 계획배분을 확인하세요.');
     if(seeded&&!config.foodShareConfirmed)warnings.push('예상 식재료비의 도/시 72%·28%는 원본 수식에서 가져온 가정입니다. 현행 교부 기준이 확인된 비율로 단정하지 않습니다.');
-    if(Object.values(cal.corrections).some(c=>c.mode==='quarter'&&c.quarters.some(x=>x.value!==null)))warnings.push('분기 정산액은 합계에 한 번 반영하고 월별로 임의 배분하지 않았습니다. 해당 월의 파생 잔액은 확정할 수 없습니다.');
+    if(!unified&&Object.values(cal.corrections).some(c=>c.mode==='quarter'&&c.quarters.some(x=>x.value!==null)))warnings.push('분기 정산액은 합계에 한 번 반영하고 월별로 임의 배분하지 않았습니다. 해당 월의 파생 잔액은 확정할 수 없습니다.');
     if(rows['41'].total===null)warnings.push('지출에 미입력·미배분 월이 있어 연간 지출 합계와 관리 잔액을 확정하지 않았습니다. 정산으로 전환한 월의 실적을 입력하세요.');
-    if(cal.planning.enabled&&fund.missing>0)warnings.push('학생수 신청·산정에 미입력 기간이 있습니다. 표시된 지원금 연간 합계는 입력분만 포함하므로 전체 학년도 확정액이 아닙니다.');
-    if(fund.quarters.some(q=>q.food.mode==='received'||q.operations.mode==='received'))warnings.push('실제 교부액은 분기 합계로 1회 적용했습니다. 해당 월은 미배분이며 월별 잔액을 확정하지 않습니다.');
+    if(!unified&&cal.planning.enabled&&fund.missing>0)warnings.push('학생수 신청·산정에 미입력 기간이 있습니다. 표시된 지원금 연간 합계는 입력분만 포함하므로 전체 학년도 확정액이 아닙니다.');
+    if(!unified&&fund.quarters.some(q=>q.food.mode==='received'||q.operations.mode==='received'))warnings.push('실제 교부액은 분기 합계로 1회 적용했습니다. 해당 월은 미배분이며 월별 잔액을 확정하지 않습니다.');
     warnings.push('관리 잔액은 산정·예상액을 포함합니다. 실제 입금·통장 잔액이 아닙니다. 학교 자체부담 지출은 지원금 잔액에서 별도 분리합니다.');
-    return {mode:'working',rows,incomeStatus:config.incomeStatus,expenseStatus:config.expenseStatus,annualLabor:labor,laborAllocation:allocation,warnings,sources};
+    if(unified)warnings.push('징수·지출은 '+Data.asOf+' 제공 자료를 대상월로 집계했습니다. 3~9월은 자료 기준 실적이며 월 마감이 검증된 확정액이라는 뜻은 아닙니다. 10~다음 해 2월은 원본 함수의 예상 분기를 적용합니다.');
+    if(unified)warnings.push('분기 교부액·분기 총액 변경은 신청 화면의 비교용 기록입니다. 이 대장의 무상급식 재료비·운영비는 원본처럼 월별 학생수×급식일수×단가로 표시하여 분기 금액 때문에 월별 칸을 비우지 않습니다.');
+    return {mode:unified?'unified':'working',rows,incomeStatus:config.incomeStatus,expenseStatus:config.expenseStatus,annualLabor:labor,laborAllocation:allocation,warnings,sources};
+  }
+  function unified(state){
+    const next=structuredClone(state),sameYear=state.year===Data.year;
+    next.matrix=validate(state.matrix,state.year)??initial(state.year,sameYear);
+    if(sameYear){
+      next.matrix.seeded=true;next.matrix.legacyRound10=true;
+      next.matrix.incomeStatus=M.map((m,i)=>i<=M.indexOf(Data.actualThroughMonth)?'정산':'예상');
+      next.matrix.expenseStatus=[...next.matrix.incomeStatus];
+      next.calculation=F.withBaseline(state.calculation,state.year);
+    }
+    return compute(next,{unified:sameYear});
+  }
+  function sourceConfig(state){
+    const x=validate(state.matrix,state.year)??initial(state.year,state.year===Data.year);
+    if(state.year===Data.year){x.seeded=true;x.legacyRound10=true;x.incomeStatus=M.map((m,i)=>i<=M.indexOf(Data.actualThroughMonth)?'정산':'예상');x.expenseStatus=[...x.incomeStatus];}
+    return x;
   }
   function totals(report){
     return {income:report.rows['16'].total,supportExpenses:report.rows['41'].total,
@@ -157,6 +178,6 @@
       balance:minus(report.rows['16'].total,report.rows['41'].total),
       schoolExpenses:sum([43,44,45,46,47,48,49].map(r=>report.rows[String(r)].total))};
   }
-  const api={Ref,M,groups,editable,derived,initial,validate,reference,compute,totals};
+  const api={Ref,M,groups,editable,derived,initial,validate,reference,compute,unified,sourceConfig,Data,totals};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.LedgerMatrix=api;
 })(typeof window!=='undefined'?window:globalThis);

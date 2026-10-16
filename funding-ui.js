@@ -7,14 +7,14 @@
   function render(options){
     dirty=false;
     const {$,esc,money,C,notify,getState,persist,setDirty}=options;
-    const state=getState(),calc=state.calculation,result=F.compute(calc,state.ends);
+    const state=getState(),calc=state.calculation,result=F.compute(F.withBaseline(calc,state.year),state.ends);
     const text=n=>n===null?'':String(n);
     const count=n=>n===null?'미입력':n.toLocaleString('ko-KR')+'식';
     function mark(v){dirty=v;setDirty(v);}
     function previewMoney(value,missing=0){return money(value)+(value!==null&&missing?' · 입력분':'');}
     $('#content').innerHTML=`
       <div class="panel">
-        <div class="section-head"><div><h2>식수로 산정하고, 정산값으로 확정</h2><p>학생 지원금과 교직원 급식비를 별도 재원으로 관리합니다. 아래는 입금액이 아닌 산정·정산 기준입니다.</p></div><span class="badge blue">${state.year}학년도</span></div>
+        <div class="section-head"><div><h2>식수로 산정하고, 정산값으로 확정</h2><p>학생 지원금과 교직원 급식비를 별도 재원으로 관리합니다. 아래는 입금액이 아닌 산정·정산 비교 기준입니다. 분기 교부액·분기 총액 변경은 이 비교 화면에 적용하며, 통합 대장의 월별 산정행은 원본 수식을 유지합니다.</p></div><span class="badge blue">${state.year}학년도</span></div>
         <div class="funding-metrics">
           <div><label>학생 식재료비 적용액</label><strong id="calc-food">${previewMoney(result.categories.food.applied,result.categories.food.missing)}</strong><p>식수 × ${money(calc.rates.studentFood)}${result.categories.food.missing?' · 미완료 '+result.categories.food.missing+'개월':''}</p></div>
           <div><label>학생 운영비 적용액</label><strong id="calc-operations">${previewMoney(result.categories.operations.applied,result.categories.operations.missing)}</strong><p>식수 × ${money(calc.rates.studentOperations)}${result.categories.operations.missing?' · 미완료 '+result.categories.operations.missing+'개월':''}</p></div>

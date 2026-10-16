@@ -1,6 +1,7 @@
 (function(root){
   'use strict';
   const Enrollment=typeof module!=='undefined'&&module.exports?require('./enrollment.cjs'):root.Enrollment;
+  const Data=typeof module!=='undefined'&&module.exports?require('./ledger-data.cjs'):root.LedgerData;
   const M=[3,4,5,6,7,8,9,10,11,12,1,2];
   const LIMIT=9_000_000_000_000;
   const keys=['studentFood','studentOperations','annualLabor','staffFood','staffOperations','staffLabor','staffVat','staffRice'];
@@ -113,6 +114,17 @@
       staffRate:staffRate.missing?null:staffRate.value,staffSummary,staffLaborVat:staffCombined,
       foodStaffRate:rates.staffFood!==null&&rates.staffRice!==null?rates.staffFood+rates.staffRice:null};
   }
+  // Read-through source defaults. Never write derived/default values into user inputs.
+  function withBaseline(calc,year){
+    const out=validate(calc,year);
+    if(year!==Data.year)return out;
+    const last=M.indexOf(Data.actualThroughMonth);
+    M.forEach((m,i)=>{out.meals[m].grades.forEach((g,j)=>{
+      if(g.people===null&&i<=last)g.people=Data.grades[m][j];
+      if(g.days===null)g.days=(out.planning.enabled?out.planning.quarters[Math.floor(i/3)].days[m][j]:null)??Data.days[m][j];
+    });if(out.meals[m].staff===null)out.meals[m].staff=Data.staffMeals[i];});
+    return out;
+  }
   function changes(a,b,prefix=''){
     const out=[];
     for(const k of Object.keys(b)){
@@ -122,6 +134,6 @@
     }
     return out;
   }
-  const api={M,keys,initial,validate,compute,changes};
+  const api={M,keys,initial,validate,compute,withBaseline,changes};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MealFunding=api;
 })(typeof window!=='undefined'?window:globalThis);
