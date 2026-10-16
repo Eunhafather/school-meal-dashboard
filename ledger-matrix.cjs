@@ -102,7 +102,7 @@
           if(r===19||r===20){
             // Original forecast split, not a newly asserted funding policy.
             value=seeded&&get(4,i)!==null?get(4,i)*(r===19?Ref.foodExpenseShare.province:Ref.foodExpenseShare.city):null;
-            why='원본 예상 수식의 '+(r===19?'72%':'28%')+' 분담비율 · 현행 기준 확인 필요';
+            why=(r===19?'교육청 식재료비 72%':'안산시 식재료비 28%')+' · 사용자 제공 재원 기준';
           }else if(r===22){value=get(12,i);why='예상: 수익자 식재료비 배분액';}
           else if(r===38){value=get(6,i);why='예상: 인건비 월별 계획배분액';}
           else{value=fore(r,i);why='원본 예상 지출 가정값 · 정산 실적 아님';}
@@ -146,7 +146,7 @@
     rows['37'].total=minus(strict([total(5),total(13)]),total(36));
     const allocation=sum(rows['6'].values);
     if(labor!==null&&allocation!==labor)warnings.push('인건비 연간 기준 '+labor.toLocaleString('ko-KR')+'원과 월별 계획배분 '+(allocation===null?'미입력':allocation.toLocaleString('ko-KR')+'원')+'이 일치하지 않습니다. 실제 교부로 간주하지 말고 계획배분을 확인하세요.');
-    if(seeded&&!config.foodShareConfirmed)warnings.push('예상 식재료비의 도/시 72%·28%는 원본 수식에서 가져온 가정입니다. 현행 교부 기준이 확인된 비율로 단정하지 않습니다.');
+    if(seeded)warnings.push('지원금 재원 구분: 식재료비 교육청 72%·안산시 28%, 운영비 교육청 100%·안산시 0%. 사용자 제공 기준입니다.');
     if(!unified&&Object.values(cal.corrections).some(c=>c.mode==='quarter'&&c.quarters.some(x=>x.value!==null)))warnings.push('분기 정산액은 합계에 한 번 반영하고 월별로 임의 배분하지 않았습니다. 해당 월의 파생 잔액은 확정할 수 없습니다.');
     if(rows['41'].total===null)warnings.push('지출에 미입력·미배분 월이 있어 연간 지출 합계와 관리 잔액을 확정하지 않았습니다. 정산으로 전환한 월의 실적을 입력하세요.');
     if(!unified&&cal.planning.enabled&&fund.missing>0)warnings.push('학생수 신청·산정에 미입력 기간이 있습니다. 표시된 지원금 연간 합계는 입력분만 포함하므로 전체 학년도 확정액이 아닙니다.');

@@ -79,7 +79,7 @@
       for(const type of ['food','operations']){
         const c=data.corrections[type];
         const base=sum(rows.map(r=>r[type]));
-        const receipt=data.planning.enabled&&data.planning.quarters[q].useReceived?Enrollment.effective(data.planning.quarters[q][type]):null;
+        const receipt=data.planning.enabled&&data.planning.quarters[q].useReceived?Enrollment.received(data.planning.quarters[q],type):null;
         if(receipt!==null&&!(c.mode==='quarter'&&c.quarters[q].value!==null)&&!(c.mode==='monthly'&&rows.some(r=>c.months[r.month].value!==null))){
           out[type]={base:base.missing?null:base.value,baseKnown:base.value,applied:receipt,missing:0,changed:false,mode:'received',source:'실제 교부액 · 분기 미배분',rows:rows.map(r=>({month:r.month,base:r[type],applied:null,source:'실제 교부액 · 월별 미배분'}))};
         }else if(c.mode==='quarter'){
