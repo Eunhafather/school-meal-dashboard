@@ -65,7 +65,7 @@
       const plannedValue=planned.missing?null:planned.value;
       const studentMeals=r.actualStudent!==null?r.actualStudent:plannedValue;
       const staffFoodRate=rates.staffFood!==null&&rates.staffRice!==null?rates.staffFood+rates.staffRice:null;
-      return {month:m,plannedStudent:plannedValue,studentMeals,studentSource:r.actualStudent!==null?'실제 식수':'인원 × 급식일수',
+      return {month:m,plannedStudent:plannedValue,studentMeals,studentSource:r.actualStudent!==null?'실제 식수':r.peopleBasis.some(b=>b.kind==='자동 예상')?'자동 예상 인원 × 급식일수':'인원 × 급식일수',
         food:product(studentMeals,rates.studentFood),operations:product(studentMeals,rates.studentOperations),
         staffMeals:r.staff,externalMeals:r.external,
         staff:{food:product(r.staff,staffFoodRate),operations:product(r.staff,rates.staffOperations),labor:product(r.staff,rates.staffLabor),vat:product(r.staff,rates.staffVat),rice:product(r.staff,rates.staffRice),total:product(r.staff,staffRate.missing?null:staffRate.value)}
