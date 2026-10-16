@@ -1,0 +1,35 @@
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V5l8-3 8 3v16M2 21h20M8 8h2m4 0h2M8 12h2m4 0h2M10 21v-5h4v5"/></svg></span>학교 급식 지원금 관리</div>
+    <span class="badge">브라우저 저장형 대시보드</span>
+  </div>
+</header>
+<main>
+  <section class="hero">
+    <div><div class="eyebrow">MEAL GRANT WORKSPACE</div><h1>학교 무상급식 관리대장</h1><p>월별 수입·지출·잔액을 한 표에서 보고, 정산 변경액을 우선 적용합니다.</p></div>
+    <div class="yearbox"><label for="year">관리 학년도</label><select id="year"></select></div>
+  </section>
+  <div class="notice"><strong>공개용 집계 기준을 보여주는 대시보드입니다. 작업 입력값은 현재 브라우저에만 저장됩니다.</strong>개인별 급여·직원 성명·원본 파일은 포함하지 않았습니다. 새 지출·징수 파일 자동 반영과 두 사람의 입력값 공동 저장은 아직 연결되지 않았습니다.</div>
+  <div class="toolbar">
+    <button id="export">백업 내려받기</button><button id="import">백업 불러오기</button><button id="sample">가상 예제 보기</button><button id="clear" class="push danger">이 학년도 초기화</button>
+    <input id="import-file" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p class="status" id="storage-status" role="status"></p>
+  <section class="stats" aria-label="저장된 지원금 요약">
+    <div class="stat"><label>교부내역 · 최초 수기 입력액</label><div class="value mono" id="stat-original">미입력</div><p class="caption">단가 산정액이 아닌 별도 교부내역</p></div>
+    <div class="stat accent"><label>교부내역 · 정산 적용액</label><div class="value mono" id="stat-total">미입력</div><p class="caption" id="stat-difference">저장한 값이 여기에 반영됩니다.</p></div>
+    <div class="stat"><label>교부내역 · 정산 변경</label><div class="value mono" id="stat-overrides">0건</div><p class="caption" id="stat-missing">미입력 항목을 확인하세요.</p></div>
+  </section>
+  <nav class="tabs" role="tablist" aria-label="지원금 관리 메뉴">
+    <button id="tab-ledger" role="tab" aria-controls="content" data-tab="ledger" aria-selected="true">급식관리대장</button>
+    <button id="tab-enrollment" role="tab" aria-controls="content" data-tab="enrollment" aria-selected="false">학생수·분기 신청</button>
+    <button id="tab-calculation" role="tab" aria-controls="content" data-tab="calculation" aria-selected="false">식수·지원금 산정</button>
+    <button id="tab-input" role="tab" aria-controls="content" data-tab="input" aria-selected="false">교부내역 수기 입력</button>
+    <button id="tab-summary" role="tab" aria-controls="content" data-tab="summary" aria-selected="false">교부내역 집계</button>
+    <button id="tab-history" role="tab" aria-controls="content" data-tab="history" aria-selected="false">변경 이력</button>
+    <button id="tab-settings" role="tab" aria-controls="content" data-tab="settings" aria-selected="false">항목·분기 설정</button>
+  </nav>
+  <section id="content" role="tabpanel" aria-labelledby="tab-ledger"></section>
+  <footer class="footer">관리 잔액은 예상·산정·배분을 포함하며 실제 입금·통장 잔액이 아닙니다. 첨부 대장 기준값과 작업값을 구분해 사용하세요.<br>새 원본 자동 갱신·공유 저장·로그인은 미연결입니다. 브라우저 변경 이력은 인증된 감사기록이 아닙니다.</footer>
+</main>
+<div id="toast" role="status" aria-live="polite" hidden></div>

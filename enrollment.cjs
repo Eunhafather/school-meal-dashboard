@@ -1,0 +1,18 @@
+(function(root){
+'use strict';
+const M=[3,4,5,6,7,8,9,10,11,12,1,2],QM=[[3,4,5],[6,7,8],[9,10,11],[12,1,2]],BASE=[2,5,8,11];
+const blank=()=>({original:null,revised:null,reason:''});
+function initial(){return {enabled:false,quarters:QM.map(months=>({people:[null,null,null],days:Object.fromEntries(months.map(m=>[m,[null,null,null]])),food:blank(),operations:blank(),useReceived:false})),settlement:Object.fromEntries(M.map(m=>[m,{people:[null,null,null],reason:''}]))};}
+function n(v,max=100000){if(v!==null&&(!Number.isSafeInteger(v)||v<0||v>max))throw Error('학생수·일수·금액은 허용 범위의 0 이상 정수여야 합니다.');return v;}
+function triple(a,max){if(!Array.isArray(a)||a.length!==3)throw Error('1~3학년 값을 모두 확인하세요.');return a.map(v=>n(v,max));}
+function validate(x){if(x===undefined||x===null)return initial();if(typeof x.enabled!=='boolean'||!Array.isArray(x.quarters)||x.quarters.length!==4)throw Error('분기 신청 형식이 올바르지 않습니다.');const out=initial();out.enabled=x.enabled;
+out.quarters=x.quarters.map((q,i)=>{const y={people:triple(q.people,100000),days:Object.fromEntries(QM[i].map(m=>[m,triple(q.days?.[m],31)])),useReceived:q.useReceived===true};for(const k of ['food','operations']){const z=q[k];if(!z||typeof z.reason!=='string'||z.reason.length>500)throw Error('교부 변경 사유 형식을 확인하세요.');y[k]={original:n(z.original,9e12),revised:n(z.revised,9e12),reason:z.reason};if(z.revised!==null&&!z.reason.trim())throw Error('변경 교부액에는 사유가 필요합니다.');}return y;});
+out.settlement=Object.fromEntries(M.map(m=>{const s=x.settlement?.[m];if(!s||typeof s.reason!=='string'||s.reason.length>500)throw Error('월별 정산 인원 형식을 확인하세요.');const people=triple(s.people,100000);if(people.some(v=>v!==null)&&!s.reason.trim())throw Error('정산 인원을 수정하면 사유가 필요합니다.');return [m,{people,reason:s.reason}];}));return out;}
+const mul=(a,b)=>a===null||b===null?null:a*b;
+const sum=a=>a.some(v=>v===null)?null:a.reduce((x,y)=>x+y,0);
+const effective=e=>e.revised??e.original;
+function resolve(calc){const p=validate(calc.planning);return Object.fromEntries(M.map(m=>{const q=p.quarters[Math.floor(M.indexOf(m)/3)],r=structuredClone(calc.meals[m]);if(p.enabled)r.grades=r.grades.map((g,i)=>({people:p.settlement[m].people[i]??g.people??q.people[i],days:g.days??q.days[m][i]}));return [m,r];}));}
+function compute(calc){const p=validate(calc.planning),resolved=resolve(calc);const monthly=M.map(m=>{const qi=Math.floor(M.indexOf(m)/3),q=p.quarters[qi],s=p.settlement[m],r=resolved[m];const grades=r.grades.map(g=>g.people);const meals=r.actualStudent??sum(r.grades.map(g=>mul(g.people,g.days)));const requestMeals=sum(q.people.map((n,i)=>mul(n,q.days[m][i])));return {month:m,quarter:qi,people:grades,days:r.grades.map(g=>g.days),totalPeople:sum(grades),meals,requestMeals,food:mul(meals,calc.rates.studentFood),operations:mul(meals,calc.rates.studentOperations),source:r.actualStudent!==null?'실제 정산 식수':s.people.some(v=>v!==null)?'정산 수정 인원':calc.meals[m].grades.some(g=>g.people!==null)?'월별 인원':'신청 기준 인원'};});
+return {enabled:p.enabled,monthly,quarters:QM.map((months,i)=>{const q=p.quarters[i],rows=monthly.filter(r=>months.includes(r.month)),out={index:i,baseMonth:BASE[i],months,people:q.people,useReceived:q.useReceived};for(const [k,rate] of [['food',calc.rates.studentFood],['operations',calc.rates.studentOperations]]){const expected=mul(sum(rows.map(r=>r.requestMeals)),rate),settlement=sum(rows.map(r=>r[k])),received=effective(q[k]);out[k]={expected,settlement,received,difference:received===null||settlement===null?null:received-settlement};}return out;})};}
+const api={M,QM,BASE,initial,validate,resolve,compute,effective};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Enrollment=api;
+})(typeof window!=='undefined'?window:globalThis);
