@@ -11,5 +11,9 @@ if(!v.notes||typeof v.notes!=='object'||Array.isArray(v.notes)||Object.entries(v
 function days(calendar,m,i){const v=calendar?.months?.[m];return v?.use?.[i]===true?v.grades[i].reduce((a,b)=>a+b,0):null;}
 function totals(calendar,m){return calendar.months[m].grades.map(a=>a.reduce((x,y)=>x+y,0));}
 function weekday(year,m,d){return new Date(Date.UTC(actualYear(year,m),m-1,d)).getUTCDay();}
-const api={M,REF,actualYear,length,initial,validate,days,totals,weekday};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MealCalendar=api;
+// A date edit is itself the instruction to use the schedule for that month/grade.
+// Unedited legacy inputs remain untouched; use[] is retained for backup compatibility.
+function setRange(calendar,m,grade,from,to,value){const v=calendar?.months?.[m],n=length(calendar?.year,m);if(!M.includes(m)||!v||(grade!=='all'&&(!Number.isInteger(grade)||grade<0||grade>2))||!Number.isInteger(from)||!Number.isInteger(to)||from<1||to>n||from>to||(value!==0&&value!==1))throw Error('학사일정 학년·날짜·급식 여부를 확인하세요.');v.grades.forEach((g,i)=>{if(grade==='all'||grade===i){for(let d=from;d<=to;d++)g[d-1]=value;v.use[i]=true;}});}
+function setDay(calendar,m,i,d,value){setRange(calendar,m,i,d,d,value);}
+const api={M,REF,actualYear,length,initial,validate,days,totals,weekday,setDay,setRange};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MealCalendar=api;
 })(typeof window!=='undefined'?window:globalThis);
