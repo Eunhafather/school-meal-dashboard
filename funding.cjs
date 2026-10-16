@@ -10,6 +10,7 @@
     const defaults=[4670,540,318588000,4670,540,870,87,63];
     return {
       planning:Enrollment.initial(),
+      mealForecast:{people:65},
       rates:Object.fromEntries(keys.map((k,i)=>[k,known?defaults[i]:null])),
       meals:Object.fromEntries(M.map(m=>[String(m),{grades:[0,1,2].map(()=>({people:null,days:null})),actualStudent:null,staff:null,external:null}])),
       corrections:{
@@ -47,7 +48,7 @@
       if(!x||!['monthly','quarter'].includes(x.mode)||!Array.isArray(x.quarters)||x.quarters.length!==4)throw new Error('정산 적용 단위가 올바르지 않습니다.');
       corrections[type]={mode:x.mode,months:Object.fromEntries(M.map(m=>[String(m),correction(x.months[String(m)])])),quarters:x.quarters.map(correction)};
     }
-    return {rates,meals,corrections,planning:Enrollment.validate(obj.planning)};
+    return {rates,meals,corrections,planning:Enrollment.validate(obj.planning),mealForecast:{people:integer(obj.mealForecast?.people??65,100000)}};
   }
   function product(a,b){return a===null||b===null?null:a*b;}
   function sum(values) {
@@ -68,7 +69,8 @@
       const staffFoodRate=rates.staffFood!==null&&rates.staffRice!==null?rates.staffFood+rates.staffRice:null;
       return {month:m,plannedStudent:plannedValue,studentMeals,studentSource:r.actualStudent!==null?'실제 식수':r.peopleBasis.some(b=>b.kind==='자동 예상')?'자동 예상 인원 × 급식일수':'인원 × 급식일수',
         food:product(studentMeals,rates.studentFood),operations:product(studentMeals,rates.studentOperations),
-        staffMeals:r.staff,externalMeals:r.external,
+        staffMeals:r.staff,externalMeals:r.external,beneficiaryMeals:r.staff===null?(r.external>0?r.external:null):r.staff+(r.external??0),
+        revenue:product(r.staff===null?(r.external>0?r.external:null):r.staff+(r.external??0),staffRate.missing?null:staffRate.value),
         staff:{food:product(r.staff,staffFoodRate),operations:product(r.staff,rates.staffOperations),labor:product(r.staff,rates.staffLabor),vat:product(r.staff,rates.staffVat),rice:product(r.staff,rates.staffRice),total:product(r.staff,staffRate.missing?null:staffRate.value)}
       };
     });
@@ -115,14 +117,31 @@
       foodStaffRate:rates.staffFood!==null&&rates.staffRice!==null?rates.staffFood+rates.staffRice:null};
   }
   // Read-through source defaults. Never write derived/default values into user inputs.
-  function withBaseline(calc,year){
-    const out=validate(calc,year);
-    if(year!==Data.year)return out;
+  function mealContext(calc,year,now=new Date()){
+    const raw=validate(calc,year),date=new Date(now),current=date.getFullYear()*12+date.getMonth();
+    const resolved=Enrollment.resolve(raw);
+    return M.map((m,i)=>{
+      const calendar=(m<3?year+1:year)*12+m-1,forecast=calendar>=current;
+      const days=resolved[m].grades.map((g,j)=>g.days??(year===Data.year?Data.days[m][j]:null));
+      const operatingDays=days.some(x=>x!==null)?Math.max(...days.filter(x=>x!==null)):null;
+      const explicit=raw.meals[m].staff;
+      const sourceActual=year===Data.year&&i<=M.indexOf(Data.actualThroughMonth)?Data.staffMeals[i]:null;
+      const staff=explicit??(forecast?product(raw.mealForecast.people,operatingDays):sourceActual);
+      const external=raw.meals[m].external??0;
+      return {month:m,forecast,days:operatingDays,people:raw.mealForecast.people,staff,external,
+        source:explicit!==null?'입력 식수':forecast?'자동 예상':sourceActual!==null?'제공 자료 식수':'미입력'};
+    });
+  }
+  function withBaseline(calc,year,now=new Date()){
+    const out=validate(calc,year),context=mealContext(calc,year,now);
     const last=M.indexOf(Data.actualThroughMonth);
-    M.forEach((m,i)=>{out.meals[m].grades.forEach((g,j)=>{
-      if(g.people===null&&i<=last)g.people=Data.grades[m][j];
-      if(g.days===null)g.days=(out.planning.enabled?out.planning.quarters[Math.floor(i/3)].days[m][j]:null)??Data.days[m][j];
-    });if(out.meals[m].staff===null)out.meals[m].staff=Data.staffMeals[i];});
+    M.forEach((m,i)=>{
+      if(year===Data.year)out.meals[m].grades.forEach((g,j)=>{
+        if(g.people===null&&i<=last)g.people=Data.grades[m][j];
+        if(g.days===null)g.days=(out.planning.enabled?out.planning.quarters[Math.floor(i/3)].days[m][j]:null)??Data.days[m][j];
+      });
+      out.meals[m].staff=context[i].staff;
+    });
     return out;
   }
   function changes(a,b,prefix=''){
@@ -134,6 +153,6 @@
     }
     return out;
   }
-  const api={M,keys,initial,validate,compute,withBaseline,changes};
+  const api={M,keys,initial,validate,compute,withBaseline,mealContext,changes};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.MealFunding=api;
 })(typeof window!=='undefined'?window:globalThis);

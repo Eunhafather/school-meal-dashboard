@@ -1,131 +1,31 @@
-(() => {
-  'use strict';
-  let page='meals', month=3, kind='food', qindex=0, dirty=false;
-  const F=window.MealFunding;
-  const rateLabels={studentFood:'학생 식재료비 / 식',studentOperations:'학생 운영비 / 식',annualLabor:'지원금 인건비 / 연간 총액',staffFood:'교직원 재료비 / 식',staffOperations:'교직원 운영비 / 식',staffLabor:'교직원 인건비 / 식',staffVat:'교직원 부가세 / 식',staffRice:'교직원 쌀지원금 / 식'};
-  const names={food:'식재료비',operations:'운영비',labor:'인건비'};
-  function render(options){
-    dirty=false;
-    const {$,esc,money,C,notify,getState,persist,setDirty}=options;
-    const state=getState(),calc=state.calculation,result=F.compute(F.withBaseline(calc,state.year),state.ends);
-    const text=n=>n===null?'':String(n);
-    const count=n=>n===null?'미입력':n.toLocaleString('ko-KR')+'식';
-    function mark(v){dirty=v;setDirty(v);}
-    function previewMoney(value,missing=0){return money(value)+(value!==null&&missing?' · 입력분':'');}
-    $('#content').innerHTML=`
-      <div class="panel">
-        <div class="section-head"><div><h2>식수로 산정하고, 정산값으로 확정</h2><p>학생 지원금과 교직원 급식비를 별도 재원으로 관리합니다. 아래는 입금액이 아닌 산정·정산 비교 기준입니다. 분기 교부액·분기 총액 변경은 이 비교 화면에 적용하며, 통합 대장의 월별 산정행은 원본 수식을 유지합니다.</p></div><span class="badge blue">${state.year}학년도</span></div>
-        <div class="funding-metrics">
-          <div><label>학생 식재료비 적용액</label><strong id="calc-food">${previewMoney(result.categories.food.applied,result.categories.food.missing)}</strong><p>식수 × ${money(calc.rates.studentFood)}${result.categories.food.missing?' · 미완료 '+result.categories.food.missing+'개월':''}</p></div>
-          <div><label>학생 운영비 적용액</label><strong id="calc-operations">${previewMoney(result.categories.operations.applied,result.categories.operations.missing)}</strong><p>식수 × ${money(calc.rates.studentOperations)}${result.categories.operations.missing?' · 미완료 '+result.categories.operations.missing+'개월':''}</p></div>
-          <div><label>연간 인건비 적용액</label><strong id="calc-labor">${money(result.categories.labor.applied)}</strong><p>${result.categories.labor.changed?'연간 정산 변경액 우선 적용':'연간 총액 · 식수와 무관 · 1회만 합산'}</p></div>
-        </div>
-        <div class="rules" style="margin-top:20px"><span class="step">우선순위</span><span><b>정산 변경액 → 식수 × 단가</b> 순서로 계산합니다. 인건비는 연간 총액을 기준으로 하며, 교직원 급식비는 학생 지원금에 합산하지 않습니다.</span></div>
-        <div class="mode" role="group" aria-label="산정 설정 메뉴"><button data-calc-page="meals" aria-pressed="${page==='meals'}">식수 입력</button><button data-calc-page="corrections" aria-pressed="${page==='corrections'}">정산 변경</button><button data-calc-page="rates" aria-pressed="${page==='rates'}">단가·총액 설정</button><button data-calc-page="review" aria-pressed="${page==='review'}">산정 결과</button></div>
-        <div id="funding-form"></div>
-      </div>`;
-    document.querySelectorAll('[data-calc-page]').forEach(b=>b.onclick=()=>{
-      if(dirty&&!confirm('저장하지 않은 산정 입력을 버리고 이동할까요?'))return;
-      page=b.dataset.calcPage;mark(false);render(options);
-    });
-    function report(error){
-      const box=$('#funding-error');if(box){box.className=error?'error':'';box.textContent=error;}
-      else notify(error);
-    }
-    function save(next,action){
-      try{
-        const clean=F.validate(next,state.year);
-        const changes=F.changes(calc,clean);
-        if(!changes.length){notify('변경된 내용이 없습니다.');return;}
-        const out=structuredClone(getState());out.calculation=clean;out.updatedAt=new Date().toISOString();
-        for(const d of changes)out.history.push({at:out.updatedAt,action,fund:'산정·정산 설정',quarter:'',
-          detail:d.key+' : '+(d.before===null?'빈칸':String(d.before))+' → '+(d.after===null?'빈칸':String(d.after))});
-        out.history=out.history.slice(-500);
-        persist(out);mark(false);render(options);notify('산정·정산 값을 저장했습니다.');
-      }catch(e){report(e.message);}
-    }
-    const error='<div id="funding-error" role="alert"></div>';
-    const actions=`${error}<div class="savebar"><p>저장 후 산정 결과와 변경 이력에 반영됩니다.</p><button id="funding-save" class="primary">산정 입력 저장</button></div>`;
-    function listen(){document.querySelectorAll('#funding-form input').forEach(x=>x.addEventListener('input',()=>mark(true)));}
-    if(page==='meals'){
-      const item=calc.meals[String(month)],row=result.monthly.find(x=>x.month===month);
-      $('#funding-form').innerHTML=`
-        <div class="selectors"><div><label for="meal-month">입력 월</label><select id="meal-month">${C.MONTHS.map(m=>`<option value="${m}" ${m===month?'selected':''}>${m<3?state.year+1:state.year}년 ${m}월</option>`).join('')}</select></div><div><label>학생 적용 식수 · 저장 기준</label><output class="effective" style="display:block">${count(row.studentMeals)}</output><p class="field-help">${row.studentMeals===null?'학년별 인원·일수 또는 실제 식수를 입력하세요.':esc(row.studentSource)}</p></div></div>
-        <h3 style="margin-top:24px">학생 지원 대상 식수</h3><p class="hint">학년별 인원 × 급식일수를 합산합니다. 학생수 빈칸은 이전 달의 최근 입력 인원으로 다음 해 2월까지 자동 예상합니다. 예상인원은 학생수·분기 신청의 학년별 월별 현황에서 확인할 수 있습니다. 실제 정산 식수가 있으면 그 값이 우선합니다. 급식이 없으면 실제 식수에 0을 입력하세요.</p>
-        <div class="grade-grid">${item.grades.map((g,i)=>`<div class="entry-card"><strong>${i+1}학년</strong><label for="people-${i}" style="margin-top:12px">지원 대상 인원 (명)</label><input id="people-${i}" inputmode="numeric" value="${text(g.people)}" placeholder="빈칸이면 최근 인원 자동 예상"><label for="days-${i}" style="margin-top:12px">급식일수 (일)</label><input id="days-${i}" inputmode="numeric" value="${text(g.days)}" placeholder="0~31일"></div>`).join('')}</div>
-        <div class="selectors" style="margin-top:20px"><div><label for="actual-student">학생 실제 정산 식수 (식)</label><input id="actual-student" inputmode="numeric" value="${text(item.actualStudent)}" placeholder="비우면 인원 × 일수 적용"><p class="field-help">0도 유효합니다. 빈칸이면 학년별 산정값으로 복귀합니다.</p></div></div>
-        <h3 style="margin-top:24px">교직원·외부인 실제 식수</h3><div class="selectors" style="margin-top:12px"><div><label for="staff-meals">교직원 실제 식수 (식)</label><input id="staff-meals" inputmode="numeric" value="${text(item.staff)}" placeholder="월별 실제 식수 수기 입력"></div><div><label for="external-meals">외부인 실제 식수 (식)</label><input id="external-meals" inputmode="numeric" value="${text(item.external)}" placeholder="식수만 기록 · 금액은 미산정"></div></div>
-        <p class="hint">교직원은 현재 설정된 단가 합계 ${money(result.staffRate)}를 적용합니다. 외부인에게 같은 단가가 적용되는지는 미확인으로, 외부인 금액은 계산에서 제외합니다.</p>${actions}`;
-      $('#meal-month').onchange=e=>{
-        if(dirty&&!confirm('미저장 식수 입력을 버리고 다른 월로 이동할까요?')){e.target.value=month;return;}
-        month=Number(e.target.value);mark(false);render(options);
-      };
-      $('#funding-save').onclick=()=>{
-        try{
-          const next=structuredClone(calc),r=next.meals[String(month)];
-          r.grades=[0,1,2].map(i=>({people:C.amount($('#people-'+i).value),days:C.amount($('#days-'+i).value)}));
-          r.actualStudent=C.amount($('#actual-student').value);r.staff=C.amount($('#staff-meals').value);r.external=C.amount($('#external-meals').value);
-          save(next,'월별 식수 변경');
-        }catch(e){report(e.message);}
-      };
-      listen();
-    }
-    if(page==='rates'){
-      $('#funding-form').innerHTML=`<h3>학생 지원금 기준</h3><p class="hint">사용자가 제공한 2026학년도 기준을 기본값으로 반영했습니다. 다른 학년도의 값은 직접 확인해 입력하세요. 변경 시 해당 학년도의 전체 산정에 적용되며 기존 정산 변경액은 유지됩니다.</p>
-        <div class="grade-grid">${['studentFood','studentOperations','annualLabor'].map(k=>`<div><label for="rate-${k}">${rateLabels[k]} (원)</label><input id="rate-${k}" inputmode="numeric" value="${text(calc.rates[k])}" placeholder="단가·총액 입력"></div>`).join('')}</div>
-        <h3 style="margin-top:24px">교직원 급식비 구성</h3><div class="grade-grid">${['staffFood','staffOperations','staffLabor','staffVat','staffRice'].map(k=>`<div><label for="rate-${k}">${rateLabels[k]} (원)</label><input id="rate-${k}" inputmode="numeric" value="${text(calc.rates[k])}" placeholder="단가 입력"></div>`).join('')}</div>
-        <div class="rules" style="margin-top:20px"><span class="step">배분</span><span>교직원 재료비에는 <b>재료비 + 쌀지원금</b>을 합산합니다. 인건비와 부가세는 별도 표시하며, 합산 참고액도 제공합니다. 학생 지원금에는 교직원 급식비를 더하지 않습니다.</span></div>${actions}`;
-      $('#funding-save').onclick=()=>{
-        try{const next=structuredClone(calc);for(const k of F.keys)next.rates[k]=C.amount($('#rate-'+k).value);save(next,'단가·연간 총액 변경');}catch(e){report(e.message);}
-      };listen();
-    }
-    if(page==='corrections'){
-      const labor=kind==='labor',c=labor?calc.corrections.labor:calc.corrections[kind],q=result.quarters[qindex];
-      const mode=labor?'annual':c.mode;
-      let list;
-      if(labor)list=[{key:'annual',label:'연간 인건비',base:calc.rates.annualLabor,entry:c}];
-      else if(mode==='quarter')list=[{key:'quarter',label:(qindex+1)+'분기 · '+q.months.map(m=>m+'월').join(' · '),base:q[kind].base,entry:c.quarters[qindex]}];
-      else list=q[kind].rows.map(r=>({key:String(r.month),label:r.month+'월',base:r.base,entry:c.months[String(r.month)]}));
-      $('#funding-form').innerHTML=`
-        <div class="selectors"><div><label for="correction-kind">정산 변경 대상</label><select id="correction-kind">${Object.entries(names).map(([k,v])=>`<option value="${k}" ${k===kind?'selected':''}>${v}${k==='labor'?' · 연간 총액':''}</option>`).join('')}</select></div>${!labor?`<div><label for="correction-quarter">정산 기간</label><select id="correction-quarter">${C.ranges(state).map(r=>`<option value="${r.index}" ${r.index===qindex?'selected':''}>${r.label} · ${r.span}</option>`).join('')}</select></div>`:''}</div>
-        ${!labor?`<div class="mode"><button id="correction-monthly" aria-pressed="${mode==='monthly'}">월별 변경액 적용</button><button id="correction-quarterly" aria-pressed="${mode==='quarter'}">분기 변경액 적용</button></div>`:'<p class="hint">연간 인건비는 월별 식수로 산정하거나 분기별로 반복 합산하지 않습니다.</p>'}
-        <p class="hint">${mode==='quarter'?'분기 변경액이 우선합니다. 월별 변경액은 보존하지만 계산에서 제외하며, 분기 금액을 월별로 임의 배분하지 않습니다.':'변경액에는 증감액이 아닌 변경 후 총액을 입력합니다. 빈칸은 기준액으로 복귀, 0원은 0원 우선 적용입니다.'}${!labor?' 선택한 월별·분기 적용 방식은 이 항목의 모든 분기에 동일하게 적용됩니다.':''}</p>
-        <div class="entry-list" style="margin-top:16px">${list.map(x=>`<article class="entry-card" data-correction="${x.key}"><div class="entry-title"><strong>${esc(x.label)}</strong><span class="badge ${x.entry.value!==null?'blue':''}">${x.entry.value!==null?'정산 변경액 우선':'산정 기준액'}</span></div><div class="fields"><div><label>산정 기준액</label><output class="effective" style="display:block">${money(x.base)}</output></div><div><label for="change-${x.key}">정산 변경 후 총액 (원)</label><input id="change-${x.key}" inputmode="numeric" value="${text(x.entry.value)}" placeholder="변경 없으면 빈칸"></div><div><label>현재 적용액 · 저장 기준</label><output class="effective" style="display:block">${money(x.entry.value??x.base)}</output></div></div><div class="reason"><label for="change-reason-${x.key}">변경 사유</label><input id="change-reason-${x.key}" maxlength="500" value="${esc(x.entry.reason)}" placeholder="변경액 입력 시 사유 필수"></div><button data-clear-correction="${x.key}" style="margin-top:12px">변경액 비우기</button></article>`).join('')}</div>${actions}`;
-      const leave=()=>!dirty||confirm('저장하지 않은 정산 변경액을 버릴까요?');
-      $('#correction-kind').onchange=e=>{if(!leave()){e.target.value=kind;return;}kind=e.target.value;mark(false);render(options);};
-      if(!labor){
-        $('#correction-quarter').onchange=e=>{if(!leave()){e.target.value=qindex;return;}qindex=Number(e.target.value);mark(false);render(options);};
-        function switchMode(value){
-          if(!leave())return;
-          const next=structuredClone(calc);next.corrections[kind].mode=value;save(next,'정산 적용 단위 변경');
-        }
-        $('#correction-monthly').onclick=()=>switchMode('monthly');$('#correction-quarterly').onclick=()=>switchMode('quarter');
-      }
-      document.querySelectorAll('[data-clear-correction]').forEach(b=>b.onclick=()=>{$('#change-'+b.dataset.clearCorrection).value='';mark(true);});
-      $('#funding-save').onclick=()=>{
-        try{
-          const next=structuredClone(calc);
-          for(const x of list){
-            const ent={value:C.amount($('#change-'+x.key).value),reason:$('#change-reason-'+x.key).value.trim()};
-            if(labor)next.corrections.labor=ent;
-            else if(mode==='quarter')next.corrections[kind].quarters[qindex]=ent;
-            else next.corrections[kind].months[x.key]=ent;
-          }
-          save(next,'산정액 정산 변경');
-        }catch(e){report(e.message);}
-      };listen();
-    }
-    if(page==='review'){
-      const studentRows=result.quarters.map(q=>`<tr><td>${q.index+1}분기<br><span class="muted">${q.months.map(m=>m+'월').join(' · ')}</span></td><td class="num">${previewMoney(q.food.applied,q.food.missing)}<br><span class="muted">${esc(q.food.source)}</span></td><td class="num">${previewMoney(q.operations.applied,q.operations.missing)}<br><span class="muted">${esc(q.operations.source)}</span></td></tr>`).join('');
-      const ss=result.staffSummary;
-      $('#funding-form').innerHTML=`
-        <h3>학생 무상급식 지원금</h3><p class="hint">도·시 부담 비율은 새로 가정하지 않았습니다. 아래는 지원금 전체 산정액이며 실제 교부내역과는 별도입니다.</p>
-        <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>기간</th><th class="num">식재료비</th><th class="num">운영비</th></tr></thead><tbody>${studentRows}</tbody><tfoot><tr><td>연간 인건비 · 별도 1회 합산</td><td colspan="2" class="num">${money(result.categories.labor.applied)}</td></tr><tr><td>지원금 입력분 기준 총계</td><td colspan="2" class="num" id="calc-total">${money(result.total)}${result.missing?' · 미완료 항목 있음':''}</td></tr></tfoot></table></div>
-        <h3 style="margin-top:28px">교직원 급식비 · 학생 지원금과 별도</h3><p class="hint">1식 합계 ${money(result.staffRate)} / 재료비 배분 단가 ${money(result.foodStaffRate)}. 아래 금액은 식수에 따른 부과·배분 산정액이며 실제 수납액은 아닙니다.</p>
-        <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>월</th><th class="num">실제 식수</th><th class="num">식재료비<br>재료비+쌀지원금</th><th class="num">운영비</th><th class="num">인건비</th><th class="num">부가세</th><th class="num">합계</th></tr></thead><tbody>${result.monthly.map(r=>`<tr><td>${r.month}월</td><td class="num">${count(r.staffMeals)}</td>${['food','operations','labor','vat','total'].map(k=>`<td class="num">${money(r.staff[k])}</td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr><td colspan="2">입력분 합계</td>${['food','operations','labor','vat','total'].map(k=>`<td class="num">${money(ss[k].value)}</td>`).join('')}</tr></tfoot></table></div>
-        <p class="hint">쌀지원금 ${money(ss.rice.value)}는 위 식재료비에 이미 포함되어 있어 다시 합산하지 않습니다. 인건비+부가세 참고 합계: ${money(result.staffLaborVat)}. 교직원 식수 미입력: ${ss.total.missing}개월.</p>
-        <p class="hint">외부인 식수는 별도로 저장하지만 단가·징수 대상 기준이 확인되지 않아 금액 산정에는 포함하지 않았습니다.</p>`;
-    }
-  }
-  window.FundingUI={render};
-})();
+(()=>{'use strict';
+let page='meals',dirty=false;
+const F=window.MealFunding,rateKeys=['staffFood','staffOperations','staffLabor','staffVat','staffRice'];
+const labels={staffFood:'식재료비',staffOperations:'운영비',staffLabor:'인건비',staffVat:'부가세',staffRice:'쌀지원금'};
+function render(o){
+ const {$,esc,money,C,notify,getState,persist,setDirty}=o,state=getState(),calc=state.calculation;
+ const num=n=>n===null?'—':n.toLocaleString('ko-KR'),text=n=>n===null?'':String(n);
+ const mark=v=>{dirty=v;setDirty(v);};mark(false);
+ function save(next){try{const clean=F.validate(next,state.year),changes=F.changes(calc,clean);if(!changes.length){mark(false);error('');notify('변경된 내용이 없습니다.');return;}const out=structuredClone(getState());out.calculation=clean;out.updatedAt=new Date().toISOString();for(const d of changes)out.history.push({at:out.updatedAt,action:'교직원·외부인 식수·단가 변경',fund:'수익자 급식비',quarter:'',detail:d.key+' : '+JSON.stringify(d.before)+' → '+JSON.stringify(d.after)});out.history=out.history.slice(-500);persist(out);mark(false);render(o);notify('월별 식수와 수익 산정을 반영했습니다.');}catch(e){error(e.message);}}
+ function error(msg){$('#funding-error').textContent=msg;$('#funding-error').className=msg?'error':'';}
+ $('#content').innerHTML=`<section class="panel"><div class="section-head"><div><h2>교직원·외부인 월별 식수·수익 정산</h2><p>월별 총식수만 입력하면 급식비와 수익자 배분액을 자동 계산합니다. 학생수·지원금은 ‘학생수·분기 신청’에서 관리합니다.</p></div><span class="badge blue">${state.year}학년도</span></div>
+ <div class="funding-metrics"><div><label>교직원 급식비 · 실적+예상</label><strong id="catering-staff-total">—</strong></div><div><label>외부인 급식비 · 입력분</label><strong id="catering-external-total">—</strong></div><div><label>수익자 급식비 합계 · 산정</label><strong id="catering-total">—</strong></div></div>
+ <div class="mode" aria-label="교직원·외부인 산정 메뉴"><button data-catering-page="meals" aria-pressed="${page==='meals'}">월별 총식수 입력</button><button data-catering-page="rates" aria-pressed="${page==='rates'}">급식 단가·예상 인원</button></div><div id="funding-form"></div><div id="funding-error" role="alert"></div><div class="savebar"><p>저장하면 급식관리대장의 징수예상액·수익자 배분에 반영됩니다.</p><button id="funding-save" class="primary">${page==='meals'?'월별 식수 전체 저장':'단가·예상 인원 저장'}</button></div></section>`;
+ const actions=document.querySelectorAll('[data-catering-page]');actions.forEach(b=>b.onclick=()=>{if(dirty&&!confirm('저장하지 않은 입력을 버리고 이동할까요?'))return;page=b.dataset.cateringPage;render(o);});
+ const context=F.mealContext(calc,state.year);
+ if(page==='meals'){
+  $('#funding-form').innerHTML=`<div class="rules"><span class="step">자동 예상</span><span><b>지난달까지: 입력·제공 식수 / 당월부터 다음 해 2월까지: 교직원 ${calc.mealForecast.people}명 × 월별 급식일수</b><br>직접 입력한 총식수는 예상값보다 우선합니다. 빈칸은 자동 기준으로 복귀하고 0식은 급식 없음으로 적용합니다. 외부인은 입력 식수만 교직원과 같은 단가로 계산합니다.</span></div>
+  <p class="hint">교직원·외부인 두 열에 엑셀의 12행×2열을 복사해 붙여넣을 수 있습니다. 빈칸 아래 파란 숫자가 현재 적용 식수입니다. 인원과 급식일수는 입력하지 않아도 됩니다. 좁은 화면에서는 표 안을 좌우로 이동하세요.</p>
+  <div class="table-wrap catering-scroll" tabindex="0" role="region" aria-label="월별 교직원·외부인 총식수 입력표"><table class="catering-table"><caption class="sr-only">월별 총식수와 급식비 산정 · 금액 단위 원</caption><thead><tr><th scope="col">대상 월</th><th scope="col">교직원 총식수 (식)</th><th scope="col">외부인 총식수 (식)</th><th scope="col">적용 기준</th><th scope="col" class="num">총식수 합계</th><th scope="col" class="num">급식비 산정액 (원)</th></tr></thead><tbody>${context.map((r,i)=>`<tr><th scope="row">${r.month}월${r.month<3?`<small>${state.year+1}년</small>`:''}</th>${['staff','external'].map((k,j)=>`<td><input id="catering-${k}-${r.month}" data-meal-row="${i}" data-meal-col="${j}" inputmode="numeric" aria-label="${r.month}월 ${k==='staff'?'교직원':'외부인'} 총식수" value="${text(calc.meals[r.month][k])}" placeholder="${k==='staff'?num(r.staff):'0'}"><small class="catering-applied" id="catering-applied-${k}-${r.month}"></small></td>`).join('')}<td><span id="catering-source-${r.month}" class="badge ${r.forecast?'orange':'blue'}">${esc(r.source)}</span><small id="catering-days-${r.month}">${r.forecast?num(r.people)+'명 × '+num(r.days)+'일':'지난달까지 실제 식수'}</small></td><td class="num"><output id="catering-count-${r.month}">—</output></td><td class="num catering-revenue"><small class="catering-mobile-month">${r.month}월</small><output id="catering-revenue-${r.month}">—</output></td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">학년도 합계 · 실적+예상</td><td class="num" id="catering-count-total">—</td><td class="num" id="catering-revenue-total">—</td></tr></tfoot></table></div>
+  <p class="hint">자동 예상 급식일수는 ‘학생수·분기 신청’의 해당 월 학년별 급식일수 중 최댓값을 사용합니다. 교직원의 실제 운영일수가 다르면 월별 총식수를 직접 입력하세요. 현재 1식 합계: <b>${money(F.compute(calc).staffRate)}</b>.</p>
+  <p class="hint">여기서 계산하는 금액은 부과·배분 산정액이며 실제 수납액이 아닙니다. 제공된 징수부의 징수액·수납액·미납액은 그대로 보존합니다. 기존 관리대장 셀 변경액이 있으면 해당 셀이 우선합니다.</p>`;
+ }else{
+  $('#funding-form').innerHTML=`<h3>교직원·외부인 공통 급식 단가</h3><p class="hint">1식 단가를 항목별로 설정합니다. 학생 지원금 단가는 이 화면에서 변경하지 않습니다.</p><div class="grade-grid">${rateKeys.map(k=>`<div><label for="rate-${k}">${labels[k]} (원/식)</label><input id="rate-${k}" inputmode="numeric" value="${text(calc.rates[k])}"></div>`).join('')}<div><label for="catering-people">당월 이후 교직원 예상 인원 (명)</label><input id="catering-people" inputmode="numeric" value="${calc.mealForecast.people}"></div></div><div class="rules" style="margin-top:24px"><span class="step">배분</span><span>식재료비에는 재료비+쌀지원금, 인건비에는 인건비+부가세를 포함합니다. 쌀지원금과 부가세는 다시 중복 합산하지 않습니다. 예상 인원 변경 시 직접 입력한 총식수는 보존됩니다.</span></div>`;
+ }
+ function draft(){const next=structuredClone(calc);if(page==='meals'){F.M.forEach(m=>{for(const k of ['staff','external'])next.meals[m][k]=C.amount($(`#catering-${k}-${m}`).value);});}else{for(const k of rateKeys)next.rates[k]=C.amount($('#rate-'+k).value);const raw=$('#catering-people').value;if(!raw.trim())throw Error('교직원 예상 인원을 입력하세요. 급식이 없으면 0명을 입력하세요.');next.mealForecast.people=C.amount(raw);}return F.validate(next,state.year);}
+ function preview(){try{const next=draft(),ctx=F.mealContext(next,state.year),r=F.compute(F.withBaseline(next,state.year),state.ends);let staff=0,external=0,total=0,meals=0,missing=false,staffKnown=false,externalKnown=false;ctx.forEach((x,i)=>{const rate=r.staffRate,s=x.staff===null||rate===null?null:x.staff*rate,e=rate===null?null:x.external*rate,t=s===null?e:s+(e??0);staffKnown ||= s!==null;externalKnown ||= e!==null;staff+=s??0;external+=e??0;total+=t??0;meals+=(x.staff??0)+x.external;if(s===null||e===null)missing=true;if(page==='meals'){$(`#catering-applied-staff-${x.month}`).textContent='적용 '+num(x.staff)+'식';$(`#catering-applied-external-${x.month}`).textContent='적용 '+num(x.external)+'식';$(`#catering-source-${x.month}`).textContent=x.source;$(`#catering-count-${x.month}`).textContent=num(x.staff===null&&x.external===0?null:(x.staff??0)+x.external);$(`#catering-revenue-${x.month}`).textContent=money(x.staff===null&&x.external===0?null:t);}});$('#catering-staff-total').textContent=money(staffKnown?staff:null)+(missing?' · 입력분':'');$('#catering-external-total').textContent=money(externalKnown?external:null);$('#catering-total').textContent=money(staffKnown||externalKnown?total:null)+(missing?' · 입력분':'');if(page==='meals'){$('#catering-count-total').textContent=num(meals)+(missing?' · 입력분':'');$('#catering-revenue-total').textContent=money(staffKnown||externalKnown?total:null)+(missing?' · 입력분':'');}error('');}catch(e){error(e.message);}}
+ document.querySelectorAll('#funding-form input').forEach(x=>x.addEventListener('input',()=>{mark(true);preview();}));
+ document.querySelectorAll('[data-meal-row]').forEach(x=>x.addEventListener('paste',e=>{const raw=e.clipboardData.getData('text/plain');if(!/[\t\n\r]/.test(raw))return;e.preventDefault();try{const grid=raw.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(r=>r.split('\t')),row=+x.dataset.mealRow,col=+x.dataset.mealCol;if(row+grid.length>12||grid.some(r=>col+r.length>2))throw Error('식수 붙여넣기는 최대 12행 × 2열 범위입니다.');const pending=[];grid.forEach((r,i)=>r.forEach((v,j)=>{const n=C.amount(v);if(n!==null&&(!Number.isSafeInteger(n)||n>10000000))throw Error('총식수는 0~10,000,000 사이 정수로 입력하세요.');pending.push([document.querySelector(`[data-meal-row="${row+i}"][data-meal-col="${col+j}"]`),v.trim()]);}));pending.forEach(([el,v])=>el.value=v);mark(true);preview();}catch(err){error(err.message);}}));
+ $('#funding-save').onclick=()=>{try{save(draft());}catch(e){error(e.message);}};preview();
+}
+window.FundingUI={render};})();

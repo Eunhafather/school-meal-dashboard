@@ -1,10 +1,10 @@
 const assert=require('node:assert/strict'),C=require('./core.cjs'),L=C.Matrix;
 let passed=0;const test=(n,fn)=>{fn();passed++;console.log('PASS',n);};
 const seed=()=>{const s=C.initial();s.matrix=L.initial(2026,true);return s;};
-test('reference has 43 rows with complete matching annual sums',()=>{
+test('reference has 44 rows including school subtotal with complete matching annual sums',()=>{
  const r=L.reference();
  for(const row of Object.values(r.rows))assert.ok(Math.abs(row.values.reduce((n,x)=>n+(x??0),0)-(row.total??0))<.01);
- assert.equal(Object.keys(r.rows).length,43);assert.equal(r.rows['16'].total,1210502232);
+ assert.equal(Object.keys(r.rows).length,44);assert.equal(r.rows['16'].total,1210502232);
 });
 test('seeded working reproduces every original numeric cell except intentionally computed unpaid row',()=>{
  const report=L.compute(seed()),ref=L.Ref;
