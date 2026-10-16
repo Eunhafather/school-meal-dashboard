@@ -5,7 +5,6 @@
   const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const KEY='meal-grant-prototype-v1-';
   let year=2026, state, tab='ledger', fundId='food-edu', quarter=0, draft, dirty=false, storageOK=true, recoveryBlocked=false, toastTimer;
-  const numberInput=n=>n===null?'':String(n);
   function read(y) {
     try {
       const raw=localStorage.getItem(KEY+y);
@@ -19,12 +18,13 @@
       // Do not silently overwrite a corrupted saved state.
       try { if(localStorage.getItem(KEY+y)) recoveryBlocked=true; } catch(_) {}
     }
-    return C.initial(y);
+    return C.validateState(C.initial(y));
   }
   function persist(next) {
     if(recoveryBlocked) throw new Error('기존 저장자료를 읽지 못했습니다. 백업을 확인한 뒤 초기화하거나 백업을 불러와주세요.');
+    next=C.validateState(next);
     try {localStorage.setItem(KEY+next.year,JSON.stringify(next));storageOK=true;}
-    catch(e) { storageOK=false; }
+    catch(e) { storageOK=false;updateTop();throw Error('브라우저 저장에 실패했습니다. 입력을 보존한 채 백업·저장 공간을 확인하세요.'); }
     state=next;
     updateTop();
   }
@@ -43,7 +43,7 @@
     $('#stat-total').textContent=sum.active?C.money(sum.total):'미입력';
     $('#stat-difference').textContent=sum.active?'최초 대비 '+(sum.difference>0?'+':'')+C.money(sum.difference):'저장한 값이 여기에 반영됩니다.';
     $('#stat-overrides').textContent=sum.overridden+'건';
-    $('#stat-missing').textContent='현재 방식 기준 미입력 '+sum.missing+'건 · 빈칸은 0원과 다릅니다.';
+    $('#stat-missing').textContent='현재 방식 기준 미입력 '+sum.missing+'건'+(sum.conflicts?' · 기존 값 대조 필요 '+sum.conflicts+'건 (집계 제외)':'')+' · 빈칸은 0원과 다릅니다.';
     $('#storage-status').textContent=recoveryBlocked?'저장자료를 읽지 못해 보호 모드입니다. 초기화 또는 정상 백업 복원이 필요합니다.':!storageOK?'브라우저 저장을 사용할 수 없습니다. 현재 화면에서만 유지되므로 백업을 내려받으세요.':'현재 브라우저 저장 · '+(state.updatedAt?'마지막 변경 '+dateText(state.updatedAt):'아직 입력된 자료가 없습니다.');
   }
   function changeTab(next) {
@@ -52,106 +52,17 @@
     $$('.tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
     $('#content').setAttribute('aria-labelledby','tab-'+tab); render();
   }
-  function entryHTML(key,label,e) {
-    const v=C.effective(e);
-    return `<article class="entry-card" data-key="${key}">
-      <div class="entry-title"><strong>${escape(label)}</strong><span class="badge ${e.revised!==null?'blue':''}" data-source>${escape(v.source)}</span></div>
-      <div class="fields">
-        <div class="field"><label for="original-${key}">최초 입력액 (원)</label><input id="original-${key}" data-field="original" inputmode="numeric" autocomplete="off" placeholder="금액 입력" value="${numberInput(e.original)}"><p class="field-help">변경 전 금액을 보존합니다.</p></div>
-        <div class="field"><label for="revised-${key}">정산 변경액 (원)</label><input id="revised-${key}" data-field="revised" inputmode="numeric" autocomplete="off" placeholder="변경 없으면 빈칸" value="${numberInput(e.revised)}"><p class="field-help">증감액이 아닌 <b>변경 후 총액</b></p></div>
-        <div class="field"><label>적용 금액 · 미저장 미리보기</label><output class="effective" style="display:block" data-effective>${C.money(v.value)}</output><p class="field-help" data-rule>${e.revised!==null?'정산 변경액을 우선 적용':'변경액이 없으면 최초 금액 적용'}</p></div>
-      </div>
-      <div class="reason"><label for="reason-${key}">변경 사유 <span class="muted">(정산 변경액 입력 시 필수)</span></label><input id="reason-${key}" data-field="reason" maxlength="500" placeholder="예: 최종 식수 확정에 따른 감액" value="${escape(e.reason)}"></div>
-      <div class="entry-actions"><button type="button" data-reset="${key}">변경액 비우기</button><span class="source">0원을 입력하면 최초 금액 대신 0원이 적용됩니다.</span></div>
-    </article>`;
-  }
-  function inputView() {
-    if(!state.funds.some(f=>f.id===fundId)) fundId=state.funds[0].id;
-    draft=structuredClone(C.period(state,fundId,quarter));
-    const rg=C.ranges(state)[quarter];
-    $('#content').innerHTML=`<div class="panel">
-      <div class="section-head"><div><h2>지원금 입력</h2><p>분기 합계 또는 월별 입력 중 하나만 계산에 사용합니다.</p></div><span class="badge">${state.year}학년도</span></div>
-      <div class="selectors">
-        <div><label for="fund">지원 항목</label><select id="fund">${state.funds.map(f=>`<option value="${f.id}" ${f.id===fundId?'selected':''}>${escape(f.name)}</option>`).join('')}</select></div>
-        <div><label for="quarter">입력 기간</label><select id="quarter">${C.ranges(state).map(r=>`<option value="${r.index}" ${r.index===quarter?'selected':''}>${r.label} · ${r.span}</option>`).join('')}</select></div>
-      </div>
-      <div class="mode" role="group" aria-label="금액 입력 방식"><button id="mode-quarter" aria-pressed="${draft.mode==='quarter'}">분기 합계 입력</button><button id="mode-monthly" aria-pressed="${draft.mode==='monthly'}">월별 입력</button></div>
-      <div class="rules"><span class="step">계산 규칙</span><span><b>정산 변경액 → 최초 입력액</b> 순으로 적용합니다. 변경액을 비우면 최초 금액으로 돌아갑니다. 분기·월 금액은 중복 합산하지 않습니다.</span></div>
-      <p class="hint" id="mode-hint"></p><div id="form-error" role="alert"></div>
-      <div class="entry-list" id="entries" style="margin-top:16px"></div>
-      <div class="savebar"><div><strong id="draft-total"></strong><p id="save-hint">위쪽 요약은 저장된 값 기준입니다.</p></div><button id="save" class="primary">입력 내용 저장</button></div>
-    </div>`;
-    $('#fund').addEventListener('change',e=>{const next=e.target.value;if(!confirmLeave()){e.target.value=fundId;return;}fundId=next;dirty=false;inputView();});
-    $('#quarter').addEventListener('change',e=>{const next=Number(e.target.value);if(!confirmLeave()){e.target.value=quarter;return;}quarter=next;dirty=false;inputView();});
-    $('#mode-quarter').onclick=()=>switchMode('quarter');
-    $('#mode-monthly').onclick=()=>switchMode('monthly');
-    $('#save').onclick=save;
-    drawEntries();
-  }
-  function getEntry(key) {return key==='q'?draft.quarter:draft.months[key];}
-  function collect() {
-    $$('.entry-card').forEach(card=>{
-      const entry=getEntry(card.dataset.key);
-      entry.original=C.amount(card.querySelector('[data-field=original]').value);
-      entry.revised=C.amount(card.querySelector('[data-field=revised]').value);
-      entry.reason=card.querySelector('[data-field=reason]').value.trim();
-    });
-  }
-  function showError(text) {$('#form-error').className=text?'error':'';$('#form-error').textContent=text;}
-  function preview() {
-    try {
-      collect(); showError('');
-      $$('.entry-card').forEach(card=>{
-        const e=getEntry(card.dataset.key), applied=C.effective(e);
-        card.querySelector('[data-effective]').textContent=C.money(applied.value);
-        card.querySelector('[data-source]').textContent=applied.source;
-        card.querySelector('[data-source]').className='badge '+(e.revised!==null?'blue':'');
-        card.querySelector('[data-rule]').textContent=e.revised!==null?'정산 변경액 우선 적용':'변경액이 없으면 최초 금액 적용';
-      });
-      const values=C.entries(state,fundId,quarter,draft).map(x=>C.effective(x.entry).value);
-      const entered=values.filter(x=>x!==null);
-      $('#draft-total').textContent='이 기간 적용 금액: '+(entered.length?C.money(entered.reduce((a,b)=>a+b,0)):'미입력');
-      $('#save-hint').textContent=dirty?'미저장 변경이 있습니다. 저장하면 위쪽 요약에 반영됩니다.':'위쪽 요약은 저장된 값 기준입니다.';
-    } catch(e) { showError(e.message); $('#draft-total').textContent='입력값을 확인해주세요.'; }
-  }
-  function drawEntries() {
-    const rg=C.ranges(state)[quarter];
-    $('#mode-quarter').setAttribute('aria-pressed',String(draft.mode==='quarter'));
-    $('#mode-monthly').setAttribute('aria-pressed',String(draft.mode==='monthly'));
-    $('#mode-hint').textContent=draft.mode==='quarter'?'분기 합계는 월별로 임의 배분하지 않습니다. 적용 금액 확인에서 “월별 미배분”으로 표시합니다.':'해당 분기의 월별 금액만 합산합니다. 다른 방식에 입력해 둔 분기 금액은 보존하지만 계산에서 제외합니다.';
-    $('#entries').innerHTML=draft.mode==='quarter'?entryHTML('q',rg.label+' · '+rg.span,draft.quarter):rg.months.map(m=>entryHTML(String(m),(m<3?state.year+1:state.year)+'년 '+m+'월',draft.months[String(m)])).join('');
-    $$('#entries input').forEach(el=>el.addEventListener('input',()=>{dirty=true;preview();}));
-    $$('[data-reset]').forEach(btn=>btn.onclick=()=>{
-      const card=btn.closest('.entry-card');card.querySelector('[data-field=revised]').value='';
-      dirty=true;preview();
-    });
-    preview();
-  }
-  function switchMode(mode) {
-    try {collect();} catch(e) {showError(e.message);return;}
-    if(draft.mode===mode) return;
-    draft.mode=mode; dirty=true; drawEntries();
-  }
-  function save() {
-    try {
-      collect();
-      const next=C.savePeriod(state,fundId,quarter,draft);
-      if(next===state) {notify('변경된 내용이 없습니다.');return;}
-      persist(next);dirty=false;drawEntries();
-      notify(storageOK?'저장했습니다. 정산 변경액이 우선 적용됩니다.':'현재 화면에 반영했습니다. 브라우저 저장 불가: 백업이 필요합니다.');
-    } catch(e) {showError(e.message);}
-  }
   function summaryView() {
     const rows=[];
     for(let q=0;q<4;q++) for(const f of state.funds) {
-      const p=C.period(state,f.id,q), list=C.entries(state,f.id,q);
+      const p=C.period(state,f.id,q),status=C.grantStatus(state,f.id,q),list=status==='active'?C.entries(state,f.id,q):[];
       const base=list.reduce((a,x)=>a+(x.entry.original??0),0);
       const active=list.filter(x=>C.effective(x.entry).value!==null);
       const total=active.reduce((a,x)=>a+C.effective(x.entry).value,0);
-      rows.push(`<tr><td>${q+1}분기<br><span class="muted">${escape(C.ranges(state)[q].span)}</span></td><td>${escape(f.name)}</td><td>${p.mode==='quarter'?'분기 합계<br><span class="muted">월별 미배분</span>':'월별 합산'}</td><td class="num">${active.length?C.money(base):'미입력'}</td><td class="num">${active.length?C.money(total):'미입력'}</td><td>${list.map(x=>escape(x.label)+' · '+escape(C.effective(x.entry).source)).join('<br>')}</td></tr>`);
+      rows.push(`<tr><td>${q+1}분기<br><span class="muted">${escape(C.ranges(state)[q].span)}</span></td><td>${escape(f.name)}</td><td>${p.mode==='quarter'?'분기 합계<br><span class="muted">월별 미배분</span>':'월별 합산'}</td><td class="num">${active.length?C.money(base):'미입력'}</td><td class="num">${active.length?C.money(total):'미입력'}</td><td>${status==='conflict'?'기존 값 대조 필요 · 집계 제외':status==='excluded'?'재원별 기록 우선 · 합산액 제외':list.map(x=>escape(x.label)+' · '+escape(C.effective(x.entry).source)).join('<br>')}</td></tr>`);
     }
     const s=C.summarize(state);
-    $('#content').innerHTML=`<div class="panel"><div class="section-head"><div><h2>계산에 적용되는 금액</h2><p>분기 합계와 월별 금액을 중복 합산하지 않습니다. 미입력은 0원으로 확정한 값이 아닙니다.</p></div></div><div class="table-wrap"><table><caption class="sr-only">저장된 분기별 지원금과 적용 기준</caption><thead><tr><th>기간</th><th>항목</th><th>입력 방식</th><th class="num">최초 입력액</th><th class="num">적용 금액</th><th>적용 근거</th></tr></thead><tbody>${rows.join('')}</tbody><tfoot><tr><td colspan="3">학년도 합계 · 입력된 금액만</td><td class="num">${s.active?C.money(s.original):'미입력'}</td><td class="num">${s.active?C.money(s.total):'미입력'}</td><td>미입력 ${s.missing}건</td></tr></tfoot></table></div></div>`;
+    $('#content').innerHTML=`<div class="panel"><div class="section-head"><div><h2>실제 교부내역 집계</h2><p>학생수·분기 신청의 통합 교부표와 같은 저장 기록입니다. 분기·월별 중 선택한 방식만 합산하며, 학생수 산정액·월별 관리대장 수입액과는 별도입니다. 미입력은 0원 확정이 아닙니다.</p></div></div><div class="table-wrap"><table><caption class="sr-only">저장된 분기별 지원금과 적용 기준</caption><thead><tr><th>기간</th><th>항목</th><th>입력 방식</th><th class="num">최초 입력액</th><th class="num">적용 금액</th><th>적용 근거</th></tr></thead><tbody>${rows.join('')}</tbody><tfoot><tr><td colspan="3">학년도 합계 · 입력된 금액만</td><td class="num">${s.active?C.money(s.original):'미입력'}</td><td class="num">${s.active?C.money(s.total):'미입력'}</td><td>미입력 ${s.missing}건${s.conflicts?' · 대조 필요 '+s.conflicts+'건 (집계 제외)':''}</td></tr></tfoot></table></div></div>`;
   }
   function changeDetails(h) {
     if(!h.before||!h.after) return escape(h.detail||'');
@@ -199,7 +110,10 @@
       const id=btn.dataset.deleteFund;
       if(state.funds.length===1){notify('지원 항목은 최소 1개 필요합니다.');return;}
       const only=structuredClone(state);only.funds=only.funds.filter(f=>f.id===id);
-      if(C.hasData(only)){notify('입력값이 있는 항목은 삭제할 수 없습니다. 금액·사유를 모두 비운 뒤 저장하세요.');return;}
+      only.funds=state.funds.filter(f=>f.id===id);
+      if(C.GRANT_MAP[id]){notify('학생수·교부 비교에 연결된 기본 재원은 삭제할 수 없습니다.');return;}
+      delete only.grantIntegration;
+      if(C.hasData(only)||state.grantIntegration?.conflicts.some(c=>c.fundId===id)){notify('입력값이 있는 항목은 삭제할 수 없습니다. 금액·사유를 모두 비운 뒤 저장하세요.');return;}
       if(!confirm('빈 지원 항목을 삭제할까요?'))return;
       const next=structuredClone(state),name=next.funds.find(f=>f.id===id).name;
       next.funds=next.funds.filter(f=>f.id!==id);delete next.records[id];
@@ -214,7 +128,6 @@
     if(tab==='ledger')window.LedgerUI.render({$,esc:escape,money:C.money,C,notify,getState:()=>state,persist});
     if(tab==='enrollment')window.EnrollmentUI.render({$,esc:escape,money:C.money,C,notify,getState:()=>state,persist,setDirty:value=>{dirty=value;}});
     if(tab==='calculation') window.FundingUI.render({$,esc:escape,money:C.money,C,notify,getState:()=>state,persist,setDirty:value=>{dirty=value;}});
-    if(tab==='input') inputView();
     if(tab==='summary') summaryView();
     if(tab==='history') historyView();
     if(tab==='settings') settingsView();
